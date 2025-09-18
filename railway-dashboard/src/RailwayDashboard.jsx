@@ -55,6 +55,8 @@ export default function RailwayDashboard() {
 	const [connectionMode, setConnectionMode] = useState('')
 	const [lastUpdateMs, setLastUpdateMs] = useState(0)
 	const [selectedPosition, setSelectedPosition] = useState(null)
+	const [livePositions, setLivePositions] = useState([])
+	const [trainRoutes, setTrainRoutes] = useState([])
 	const lastTelemetryRef = useRef({ data: [], ts: 0 })
 	const rafRef = useRef(0)
 
@@ -77,6 +79,34 @@ export default function RailwayDashboard() {
 		}
 		loadStatic()
 		return () => { cancelled = true }
+	}, [])
+
+	// Live train positions polling (separate from main simulation)
+	useEffect(() => {
+		let cancelled = false
+		let timer
+		async function poll() {
+			try {
+				const res = await fetch('http://localhost:8000/train_positions', { cache: 'no-store' })
+				const json = await res.json()
+				if (!cancelled && json && json.success) {
+					setLivePositions(json.data || [])
+					if (json.routes) {
+						setTrainRoutes(json.routes)
+					}
+				}
+			} catch (e) {
+				// ignore polling errors
+			}
+			finally {
+				if (!cancelled) timer = setTimeout(poll, 50) // Poll every 50ms for ultra smooth movement
+			}
+		}
+		poll()
+		return () => {
+			cancelled = true
+			if (timer) clearTimeout(timer)
+		}
 	}, [])
 
 	// Live updates: try WS; fallback to HTTP polling if WS not available
@@ -360,6 +390,20 @@ export default function RailwayDashboard() {
 						})}
 					</Pane>
 
+					{/* Train Routes */}
+					<Pane name="train-routes" style={{ zIndex: 415 }}>
+						{trainRoutes.map((route, index) => (
+							<Polyline
+								key={`route-${index}`}
+								positions={route.coordinates}
+								color={route.color}
+								weight={3}
+								opacity={0.6}
+								dashArray="5, 5"
+							/>
+						))}
+					</Pane>
+
 					{/* Stations */}
 					<Pane name="stations" style={{ zIndex: 420 }}>
 						{stations.map((s, index) => (
@@ -438,6 +482,48 @@ export default function RailwayDashboard() {
 									<div className="custom-tooltip">
 										<div className="font-semibold">{t.id}</div>
 										<div className="text-sm text-gray-600 capitalize">{t.status}</div>
+									</div>
+								</Tooltip>
+							</Marker>
+						))}
+					</Pane>
+
+					{/* Live Train Positions Overlay */}
+					<Pane name="live-overlay" style={{ zIndex: 460 }}>
+						{livePositions.map((p, idx) => (
+							<Marker
+								key={`live-${p.train_id}`}
+								position={[p.lat, p.lon]}
+								icon={L.divIcon({
+									className: 'train-icon',
+									html: `
+										<div class="train-marker-container" style="
+											display:flex;align-items:center;gap:4px;
+											background:rgba(255,255,255,0.95);
+											padding:3px 8px;border-radius:15px;
+											border:3px solid ${p.color || '#3b82f6'};
+											box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+											transition: all 0.2s ease;
+										">
+											<div style="font-size:18px;line-height:1;">🚆</div>
+											<div class="train-marker-label" style="
+												font-weight:bold;
+												color:${p.color || '#1e40af'};
+												font-size:12px;
+											">${p.train_id}</div>
+										</div>
+									`
+								})}
+							>
+								<Tooltip direction="right" offset={[8,0]} opacity={1} className="custom-tooltip">
+									<div className="custom-tooltip">
+										<div className="font-semibold">{p.train_id}</div>
+										<div className="text-sm text-gray-600">
+											Progress: {Math.round((p.progress || 0) * 100)}%
+										</div>
+										<div className="text-sm text-gray-600">
+											Direction: {p.direction > 0 ? 'Forward' : 'Reverse'}
+										</div>
 									</div>
 								</Tooltip>
 							</Marker>
