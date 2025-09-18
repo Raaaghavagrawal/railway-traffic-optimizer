@@ -13,11 +13,18 @@ from rt_simulation import AsyncSimulation, Train, TrainPriority, Event, EventTyp
 async def lifespan(app: FastAPI):
     # Start async simulation on startup
     await sim.start()
+    # Start simple sequence counter for /train_positions
+    app.state.seq_count = 1
+    app.state.seq_task = asyncio.create_task(_advance_sequence())
     try:
         yield
     finally:
         # Stop on shutdown
         await sim.stop()
+        try:
+            app.state.seq_task.cancel()
+        except Exception:
+            pass
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
@@ -54,6 +61,33 @@ class EventIn(BaseModel):
 
 
 # (startup/shutdown handled by FastAPI lifespan)
+_SEQ_POINTS = [
+    {"train_id": "TR1", "lat": 28.646, "lon": 77.221},
+    {"train_id": "TR2", "lat": 28.655, "lon": 77.24},
+    {"train_id": "TR3", "lat": 28.635, "lon": 77.224},
+    {"train_id": "TR4", "lat": 28.596, "lon": 77.26},
+]
+
+
+async def _advance_sequence() -> None:
+    while True:
+        try:
+            await asyncio.sleep(1.0)
+            # FastAPI app is global 'app'
+            cur = getattr(app.state, 'seq_count', 1)
+            app.state.seq_count = 1 if cur >= 4 else (cur + 1)
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            await asyncio.sleep(1.0)
+
+
+@app.get("/train_positions")
+async def get_train_positions() -> Dict[str, Any]:
+    c = int(getattr(app.state, 'seq_count', 1))
+    rows = _SEQ_POINTS[:c]
+    return {"success": True, "data": rows, "count": c}
+
 
 
 @app.get("/network")

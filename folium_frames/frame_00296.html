@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    
+            <meta name="viewport" content="width=device-width,
+                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <style>
+                #map_e5f464a3f1507945d4905fe5350e4ece {
+                    position: relative;
+                    width: 100.0%;
+                    height: 100.0%;
+                    left: 0.0%;
+                    top: 0.0%;
+                }
+                .leaflet-container { font-size: 1rem; }
+            </style>
+
+            <style>html, body {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            </style>
+
+            <style>#map {
+                position:absolute;
+                top:0;
+                bottom:0;
+                right:0;
+                left:0;
+                }
+            </style>
+
+            <script>
+                L_NO_TOUCH = false;
+                L_DISABLE_3D = false;
+            </script>
+
+        
+</head>
+<body>
+    
+    
+            <div class="folium-map" id="map_e5f464a3f1507945d4905fe5350e4ece" ></div>
+        
+</body>
+<script>
+    
+    
+            var map_e5f464a3f1507945d4905fe5350e4ece = L.map(
+                "map_e5f464a3f1507945d4905fe5350e4ece",
+                {
+                    center: [28.64, 77.23],
+                    crs: L.CRS.EPSG3857,
+                    ...{
+  "zoom": 12,
+  "zoomControl": true,
+  "preferCanvas": false,
+}
+
+                }
+            );
+            L.control.scale().addTo(map_e5f464a3f1507945d4905fe5350e4ece);
+
+            
+
+        
+    
+            var tile_layer_f4371e3db88562b8df36cc2f36be53ba = L.tileLayer(
+                "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                {
+  "minZoom": 0,
+  "maxZoom": 19,
+  "maxNativeZoom": 19,
+  "noWrap": false,
+  "attribution": "\u0026copy; \u003ca href=\"https://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors",
+  "subdomains": "abc",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 1,
+}
+
+            );
+        
+    
+            tile_layer_f4371e3db88562b8df36cc2f36be53ba.addTo(map_e5f464a3f1507945d4905fe5350e4ece);
+        
+    
+            var poly_line_0d8bf8c2ed9a63867acc8987598e3513 = L.polyline(
+                [[28.643, 77.219], [28.65, 77.222], [28.657, 77.225], [28.667, 77.227]],
+                {"bubblingMouseEvents": true, "color": "darkgreen", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "darkgreen", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(map_e5f464a3f1507945d4905fe5350e4ece);
+        
+    
+            poly_line_0d8bf8c2ed9a63867acc8987598e3513.bindTooltip(
+                `<div>
+                     Route NDLS_DLI
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_4bf71ebf04988d8a401bf204dcbfad09 = L.polyline(
+                [[28.667, 77.227], [28.65, 77.245], [28.63, 77.265], [28.607, 77.289]],
+                {"bubblingMouseEvents": true, "color": "black", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "black", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(map_e5f464a3f1507945d4905fe5350e4ece);
+        
+    
+            poly_line_4bf71ebf04988d8a401bf204dcbfad09.bindTooltip(
+                `<div>
+                     Route DLI_ANVT
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_c17c403ec1d30d3b56ae8401af8c8aad = L.polyline(
+                [[28.643, 77.219], [28.63, 77.226], [28.61, 77.24], [28.588, 77.251]],
+                {"bubblingMouseEvents": true, "color": "lightgray", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "lightgray", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(map_e5f464a3f1507945d4905fe5350e4ece);
+        
+    
+            poly_line_c17c403ec1d30d3b56ae8401af8c8aad.bindTooltip(
+                `<div>
+                     Route NDLS_NZM
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_2b85fd45cb8fe0b33be07ebcf0501d4a = L.polyline(
+                [[28.588, 77.251], [28.6, 77.265], [28.61, 77.277], [28.607, 77.289]],
+                {"bubblingMouseEvents": true, "color": "beige", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "beige", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(map_e5f464a3f1507945d4905fe5350e4ece);
+        
+    
+            poly_line_2b85fd45cb8fe0b33be07ebcf0501d4a.bindTooltip(
+                `<div>
+                     Route NZM_ANVT
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_24a13d6ee5ba00952c9c07fdf508d3ef = L.polyline(
+                [[28.667, 77.227], [28.657, 77.225], [28.65, 77.222], [28.643, 77.219]],
+                {"bubblingMouseEvents": true, "color": "darkgreen", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "darkgreen", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(map_e5f464a3f1507945d4905fe5350e4ece);
+        
+    
+            poly_line_24a13d6ee5ba00952c9c07fdf508d3ef.bindTooltip(
+                `<div>
+                     Route DLI_NDLS
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_5c5d416b8345a551093df731e7244a3d = L.polyline(
+                [[28.607, 77.289], [28.63, 77.265], [28.65, 77.245], [28.667, 77.227]],
+                {"bubblingMouseEvents": true, "color": "black", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "black", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(map_e5f464a3f1507945d4905fe5350e4ece);
+        
+    
+            poly_line_5c5d416b8345a551093df731e7244a3d.bindTooltip(
+                `<div>
+                     Route ANVT_DLI
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_8f0e7efba8d5ee20f0ffd3cd26418ca7 = L.polyline(
+                [[28.588, 77.251], [28.61, 77.24], [28.63, 77.226], [28.643, 77.219]],
+                {"bubblingMouseEvents": true, "color": "lightgray", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "lightgray", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(map_e5f464a3f1507945d4905fe5350e4ece);
+        
+    
+            poly_line_8f0e7efba8d5ee20f0ffd3cd26418ca7.bindTooltip(
+                `<div>
+                     Route NZM_NDLS
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_a1a681e4764baa68689a8cca7348641a = L.polyline(
+                [[28.607, 77.289], [28.61, 77.277], [28.6, 77.265], [28.588, 77.251]],
+                {"bubblingMouseEvents": true, "color": "beige", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "beige", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(map_e5f464a3f1507945d4905fe5350e4ece);
+        
+    
+            poly_line_a1a681e4764baa68689a8cca7348641a.bindTooltip(
+                `<div>
+                     Route ANVT_NZM
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_b1f1a226ee5dce93875d6c0128dc3a39 = L.circleMarker(
+                [28.667, 77.227],
+                {"bubblingMouseEvents": true, "color": "red", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "red", "fillOpacity": 0.95, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 6, "stroke": true, "weight": 3}
+            ).addTo(map_e5f464a3f1507945d4905fe5350e4ece);
+        
+    
+        var popup_dd538f16052a49ba8d61a94fd315adab = L.popup({
+  "maxWidth": 250,
+});
+
+        
+            
+                var html_515b2858dcfd95861e67a5f04af15592 = $(`<div id="html_515b2858dcfd95861e67a5f04af15592" style="width: 100.0%; height: 100.0%;"><b>TR1</b><br>speed=29.7 m/s<br>progress=100.0%</div>`)[0];
+                popup_dd538f16052a49ba8d61a94fd315adab.setContent(html_515b2858dcfd95861e67a5f04af15592);
+            
+        
+
+        circle_marker_b1f1a226ee5dce93875d6c0128dc3a39.bindPopup(popup_dd538f16052a49ba8d61a94fd315adab)
+        ;
+
+        
+    
+    
+            var circle_marker_a98f1d3f94b79ba676db16aa882b5496 = L.circleMarker(
+                [28.607, 77.289],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "blue", "fillOpacity": 0.95, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 6, "stroke": true, "weight": 3}
+            ).addTo(map_e5f464a3f1507945d4905fe5350e4ece);
+        
+    
+        var popup_48841a328b0a99d5de9bbd6f7d2bcacc = L.popup({
+  "maxWidth": 250,
+});
+
+        
+            
+                var html_8810cda201172e7aef279d14ac5d0ea0 = $(`<div id="html_8810cda201172e7aef279d14ac5d0ea0" style="width: 100.0%; height: 100.0%;"><b>TR2</b><br>speed=29.9 m/s<br>progress=100.0%</div>`)[0];
+                popup_48841a328b0a99d5de9bbd6f7d2bcacc.setContent(html_8810cda201172e7aef279d14ac5d0ea0);
+            
+        
+
+        circle_marker_a98f1d3f94b79ba676db16aa882b5496.bindPopup(popup_48841a328b0a99d5de9bbd6f7d2bcacc)
+        ;
+
+        
+    
+    
+            var circle_marker_3b096233043d5b8a98121e5ff72e38de = L.circleMarker(
+                [28.588, 77.251],
+                {"bubblingMouseEvents": true, "color": "green", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "green", "fillOpacity": 0.95, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 6, "stroke": true, "weight": 3}
+            ).addTo(map_e5f464a3f1507945d4905fe5350e4ece);
+        
+    
+        var popup_46a4ed2068997135c1c892cd4d8d73af = L.popup({
+  "maxWidth": 250,
+});
+
+        
+            
+                var html_856c2f496518ae2db558ba3985241257 = $(`<div id="html_856c2f496518ae2db558ba3985241257" style="width: 100.0%; height: 100.0%;"><b>TR3</b><br>speed=22.2 m/s<br>progress=100.0%</div>`)[0];
+                popup_46a4ed2068997135c1c892cd4d8d73af.setContent(html_856c2f496518ae2db558ba3985241257);
+            
+        
+
+        circle_marker_3b096233043d5b8a98121e5ff72e38de.bindPopup(popup_46a4ed2068997135c1c892cd4d8d73af)
+        ;
+
+        
+    
+    
+            var circle_marker_de340c2fc626d87d5e10fedc05d1fa76 = L.circleMarker(
+                [28.607, 77.289],
+                {"bubblingMouseEvents": true, "color": "purple", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "purple", "fillOpacity": 0.95, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 6, "stroke": true, "weight": 3}
+            ).addTo(map_e5f464a3f1507945d4905fe5350e4ece);
+        
+    
+        var popup_d23869eb1d2f30b3465578cbd8a76272 = L.popup({
+  "maxWidth": 250,
+});
+
+        
+            
+                var html_5b0fdab9480fb470365788bdf60952d1 = $(`<div id="html_5b0fdab9480fb470365788bdf60952d1" style="width: 100.0%; height: 100.0%;"><b>TR4</b><br>speed=20.4 m/s<br>progress=100.0%</div>`)[0];
+                popup_d23869eb1d2f30b3465578cbd8a76272.setContent(html_5b0fdab9480fb470365788bdf60952d1);
+            
+        
+
+        circle_marker_de340c2fc626d87d5e10fedc05d1fa76.bindPopup(popup_d23869eb1d2f30b3465578cbd8a76272)
+        ;
+
+        
+    
+    
+            var circle_marker_7fa7833bba253cd374c315b3b1d07ab9 = L.circleMarker(
+                [28.643696032377388, 77.2192982995903],
+                {"bubblingMouseEvents": true, "color": "orange", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "orange", "fillOpacity": 0.95, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 6, "stroke": true, "weight": 3}
+            ).addTo(map_e5f464a3f1507945d4905fe5350e4ece);
+        
+    
+        var popup_e28cdd47940800aead730b3099a61b91 = L.popup({
+  "maxWidth": 250,
+});
+
+        
+            
+                var html_c073af9c2b9c0e832b04728e6a3f190e = $(`<div id="html_c073af9c2b9c0e832b04728e6a3f190e" style="width: 100.0%; height: 100.0%;"><b>TR5</b><br>speed=18.8 m/s<br>progress=97.0%</div>`)[0];
+                popup_e28cdd47940800aead730b3099a61b91.setContent(html_c073af9c2b9c0e832b04728e6a3f190e);
+            
+        
+
+        circle_marker_7fa7833bba253cd374c315b3b1d07ab9.bindPopup(popup_e28cdd47940800aead730b3099a61b91)
+        ;
+
+        
+    
+    
+            var circle_marker_11fe40f4816c5723d4bcdac141b58922 = L.circleMarker(
+                [28.612945184371924, 77.28279632935104],
+                {"bubblingMouseEvents": true, "color": "pink", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "pink", "fillOpacity": 0.95, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 6, "stroke": true, "weight": 3}
+            ).addTo(map_e5f464a3f1507945d4905fe5350e4ece);
+        
+    
+        var popup_31522f7be768655d97214c5d0c2e8b79 = L.popup({
+  "maxWidth": 250,
+});
+
+        
+            
+                var html_849aae5cb98299e74e935402690729cf = $(`<div id="html_849aae5cb98299e74e935402690729cf" style="width: 100.0%; height: 100.0%;"><b>TR6</b><br>speed=29.8 m/s<br>progress=10.0%</div>`)[0];
+                popup_31522f7be768655d97214c5d0c2e8b79.setContent(html_849aae5cb98299e74e935402690729cf);
+            
+        
+
+        circle_marker_11fe40f4816c5723d4bcdac141b58922.bindPopup(popup_31522f7be768655d97214c5d0c2e8b79)
+        ;
+
+        
+    
+</script>
+</html>

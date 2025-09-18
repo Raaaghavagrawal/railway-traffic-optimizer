@@ -103,13 +103,20 @@ def seed_trains(sim: RailwaySimulation) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-	await sim.start()
-	try:
-		yield
-	except Exception:
-		raise
-	finally:
-		await sim.stop()
+    await sim.start()
+    # Start a simple 1..4 counter for demo /train_positions endpoint (dashboard overlay)
+    app.state.seq_count = 1
+    app.state.seq_task = asyncio.create_task(_advance_sequence(app))
+    try:
+        yield
+    except Exception:
+        raise
+    finally:
+        await sim.stop()
+        try:
+            app.state.seq_task.cancel()
+        except Exception:
+            pass
 
 
 app = FastAPI(lifespan=lifespan)
@@ -591,6 +598,168 @@ async def ws_updates(ws: WebSocket) -> None:
 			await ws.send_json(msg)
 	except WebSocketDisconnect:
 		return
+
+
+# --- Continuous train movement simulation ---
+import math
+import random
+
+# Define train routes as polylines between Delhi stations
+TRAIN_ROUTES = {
+    "TR1": {
+        "route": [
+            (28.6430, 77.2190), (28.6460, 77.2210), (28.6500, 77.2230), 
+            (28.6550, 77.2250), (28.6600, 77.2270), (28.6670, 77.2270)
+        ],
+        "color": "#ef4444",  # red
+        "speed": 0.008  # progress per update (0.0 to 1.0)
+    },
+    "TR2": {
+        "route": [
+            (28.6670, 77.2270), (28.6600, 77.2350), (28.6500, 77.2450), 
+            (28.6400, 77.2550), (28.6300, 77.2650), (28.6200, 77.2750), 
+            (28.6100, 77.2850), (28.6070, 77.2890)
+        ],
+        "color": "#3b82f6",  # blue
+        "speed": 0.006
+    },
+    "TR3": {
+        "route": [
+            (28.6430, 77.2190), (28.6400, 77.2220), (28.6350, 77.2260), 
+            (28.6300, 77.2300), (28.6250, 77.2350), (28.6200, 77.2400), 
+            (28.6150, 77.2450), (28.6100, 77.2500), (28.6050, 77.2550), 
+            (28.6000, 77.2600), (28.5950, 77.2650), (28.5900, 77.2700), 
+            (28.5880, 77.2510)
+        ],
+        "color": "#10b981",  # green
+        "speed": 0.005
+    },
+    "TR4": {
+        "route": [
+            (28.5880, 77.2510), (28.5920, 77.2550), (28.5960, 77.2600), 
+            (28.6000, 77.2650), (28.6040, 77.2700), (28.6080, 77.2750), 
+            (28.6100, 77.2800), (28.6120, 77.2850), (28.6070, 77.2890)
+        ],
+        "color": "#f59e0b",  # orange
+        "speed": 0.007
+    }
+}
+
+# Train state tracking
+_train_states = {}
+_route_cache = {}
+
+def _interpolate_position(route, progress):
+    """Interpolate position along route based on progress (0.0 to 1.0)"""
+    if not route or len(route) < 2:
+        return route[0] if route else (28.6448, 77.2167)
+    
+    total_length = 0
+    segments = []
+    for i in range(len(route) - 1):
+        p1, p2 = route[i], route[i + 1]
+        # Haversine distance
+        lat1, lon1 = p1
+        lat2, lon2 = p2
+        dlat = math.radians(lat2 - lat1)
+        dlon = math.radians(lon2 - lon1)
+        a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+        distance = 2 * 6371000 * math.asin(math.sqrt(a))  # meters
+        segments.append((p1, p2, distance))
+        total_length += distance
+    
+    if total_length == 0:
+        return route[0]
+    
+    target_distance = progress * total_length
+    current_distance = 0
+    
+    for p1, p2, segment_length in segments:
+        if current_distance + segment_length >= target_distance:
+            # Interpolate within this segment
+            segment_progress = (target_distance - current_distance) / segment_length
+            lat1, lon1 = p1
+            lat2, lon2 = p2
+            lat = lat1 + (lat2 - lat1) * segment_progress
+            lon = lon1 + (lon2 - lon1) * segment_progress
+            return (lat, lon)
+        current_distance += segment_length
+    
+    return route[-1]
+
+async def _advance_sequence(app: FastAPI) -> None:
+    """Continuous train movement simulation"""
+    # Initialize train states - start at different positions to avoid gaps
+    for train_id, route_data in TRAIN_ROUTES.items():
+        _train_states[train_id] = {
+            "progress": random.uniform(0.0, 1.0),  # Start at random positions
+            "direction": 1,  # 1 for forward, -1 for reverse
+            "color": route_data["color"],
+            "speed": route_data["speed"]
+        }
+    
+    while True:
+        try:
+            await asyncio.sleep(0.05)  # Update 20 times per second for very smooth movement
+            
+            for train_id, state in _train_states.items():
+                # Update progress based on direction
+                if state["direction"] == 1:
+                    state["progress"] += state["speed"]
+                    # Check if reached end - reverse immediately
+                    if state["progress"] >= 1.0:
+                        state["progress"] = 1.0
+                        state["direction"] = -1
+                else:
+                    state["progress"] -= state["speed"]
+                    # Check if reached start - reverse immediately
+                    if state["progress"] <= 0.0:
+                        state["progress"] = 0.0
+                        state["direction"] = 1
+                
+                # Keep progress within bounds
+                state["progress"] = max(0.0, min(1.0, state["progress"]))
+            
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            await asyncio.sleep(0.05)
+
+@app.get("/train_positions")
+async def get_train_positions() -> Dict[str, Any]:
+    """Get current train positions with routes"""
+    positions = []
+    routes = []
+    
+    for train_id, state in _train_states.items():
+        route_data = TRAIN_ROUTES[train_id]
+        route = route_data["route"]
+        
+        # Calculate current position
+        current_pos = _interpolate_position(route, state["progress"])
+        
+        positions.append({
+            "train_id": train_id,
+            "lat": current_pos[0],
+            "lon": current_pos[1],
+            "color": state["color"],
+            "progress": state["progress"],
+            "direction": state["direction"]
+        })
+        
+        # Add route if not already cached
+        if train_id not in _route_cache:
+            _route_cache[train_id] = {
+                "coordinates": route,
+                "color": state["color"]
+            }
+    
+    return {
+        "success": True, 
+        "data": positions, 
+        "routes": list(_route_cache.values()),
+        "count": len(positions)
+    }
 
 
 if __name__ == "__main__":
