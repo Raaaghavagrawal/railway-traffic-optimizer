@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import os
 import pandas as pd
 import json
@@ -107,6 +107,9 @@ async def lifespan(app: FastAPI):
     # Start a simple 1..4 counter for demo /train_positions endpoint (dashboard overlay)
     app.state.seq_count = 1
     app.state.seq_task = asyncio.create_task(_advance_sequence(app))
+    # Start safety alerts computation loop
+    app.state.alerts = []
+    app.state.alert_task = asyncio.create_task(_alerts_loop(app))
     try:
         yield
     except Exception:
@@ -115,6 +118,10 @@ async def lifespan(app: FastAPI):
         await sim.stop()
         try:
             app.state.seq_task.cancel()
+        except Exception:
+            pass
+        try:
+            app.state.alert_task.cancel()
         except Exception:
             pass
 
@@ -435,6 +442,162 @@ def _locate_train_latlon(train_id: str) -> Optional[Dict[str, Any]]:
     return {"lat": last[0], "lon": last[1], "status": t.status}
 
 
+def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    from math import radians, sin, cos, atan2, sqrt
+    R = 6371000.0
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    la1 = radians(lat1)
+    la2 = radians(lat2)
+    h = sin(dlat/2)**2 + cos(la1)*cos(la2)*sin(dlon/2)**2
+    return 2*R*atan2(sqrt(h), sqrt(1-h))
+
+
+def _same_edge(a: Optional[Tuple[str, str]], b: Optional[Tuple[str, str]]) -> bool:
+    if not a or not b:
+        return False
+    return a == b
+
+
+def _opposite_edge(a: Optional[Tuple[str, str]], b: Optional[Tuple[str, str]]) -> bool:
+    if not a or not b:
+        return False
+    return a == (b[1], b[0])
+
+
+def _compute_alerts() -> List[Dict[str, Any]]:
+    # Thresholds (meters)
+    NEAR_WARN = 800.0
+    CRITICAL = 400.0
+    alerts: List[Dict[str, Any]] = []
+
+    # Build combined list of active trains: simulation trains + live demo trains
+    combined: List[Dict[str, Any]] = []
+    # 1) Simulation trains
+    for tid in list(sim.trains.keys()):
+        pos = _locate_train_latlon(tid)
+        if pos:
+            t = sim.trains.get(tid)
+            combined.append({
+                "id": tid,
+                "lat": pos["lat"],
+                "lon": pos["lon"],
+                "speed_mps": float(getattr(t, "speed_mps", 0.0) or 0.0),
+                "current_edge": getattr(t, "current_edge", None),
+                "delay_min": int(getattr(t, "delay_min", 0) or 0),
+            })
+
+    # 2) Live demo trains from TRAIN_ROUTES/_train_states
+    try:
+        # Precompute route lengths
+        route_lengths: Dict[str, float] = {}
+        for tid, meta in TRAIN_ROUTES.items():
+            rt = meta.get("route") or []
+            total = 0.0
+            for i in range(1, len(rt)):
+                a = rt[i-1]; b = rt[i]
+                total += _haversine_m(a[0], a[1], b[0], b[1])
+            route_lengths[tid] = total
+        for tid, state in _train_states.items():
+            meta = TRAIN_ROUTES.get(tid) or {}
+            route = meta.get("route") or []
+            pos = _interpolate_position(route, state.get("progress", 0.0))
+            # Approx speed in m/s based on progress per 0.05s tick
+            prog_per_tick = float(state.get("speed", 0.0) or 0.0)
+            total_len = float(route_lengths.get(tid, 0.0) or 0.0)
+            speed_mps = (prog_per_tick * total_len / 0.05) if total_len > 0 else 0.0
+            combined.append({
+                "id": tid,
+                "lat": pos[0],
+                "lon": pos[1],
+                "speed_mps": speed_mps,
+                "current_edge": None,
+                "delay_min": 0,
+            })
+    except Exception:
+        pass
+
+    # Pairwise checks
+    for i in range(len(combined)):
+        for j in range(i + 1, len(combined)):
+            A = combined[i]; B = combined[j]
+            a_id = A["id"]; b_id = B["id"]
+            d = _haversine_m(A["lat"], A["lon"], B["lat"], B["lon"]) if A and B else 1e9
+            if d > NEAR_WARN:
+                continue
+            same = _same_edge(A.get("current_edge"), B.get("current_edge"))
+            opposite = _opposite_edge(A.get("current_edge"), B.get("current_edge"))
+            # Estimate relative closing speed (m/s)
+            rel = 0.0
+            if same:
+                # Determine who is behind using position along edge
+                ua, va = A.get("current_edge") if A.get("current_edge") else (None, None)
+                ub, vb = B.get("current_edge") if B.get("current_edge") else (None, None)
+                if ua is not None and ub is not None and (ua, va) == (ub, vb):
+                    # Fallback: treat higher speed as trailing uncertainty
+                    if float(getattr(sim.trains.get(a_id, object()), "position", 0.0)) < float(getattr(sim.trains.get(b_id, object()), "position", 0.0)):
+                        # A behind B
+                        rel = max(0.0, float(A.get("speed_mps", 0.0)) - float(B.get("speed_mps", 0.0)))
+                    else:
+                        # B behind A
+                        rel = max(0.0, float(B.get("speed_mps", 0.0)) - float(A.get("speed_mps", 0.0)))
+            elif opposite:
+                rel = float(A.get("speed_mps", 0.0)) + float(B.get("speed_mps", 0.0))
+            else:
+                # Different edges: approximate by speed difference
+                rel = abs(float(A.get("speed_mps", 0.0)) - float(B.get("speed_mps", 0.0)))
+
+            severity = "warn" if d > CRITICAL else "critical"
+            suggestion: List[str] = []
+            # Heuristics
+            if severity == "critical":
+                if opposite:
+                    suggestion.append("Issue immediate slow order to both trains; prepare hold at nearest node")
+                elif same and rel > 0:
+                    # slow down trailing train by up to 30%
+                    suggestion.append("Reduce speed of trailing train by 20-30% until headway restores")
+                else:
+                    suggestion.append("Issue caution and reduce speed to increase separation")
+                # Consider track change if alternative exists
+                suggestion.append("Evaluate alternate track/route if parallel segment available")
+            else:
+                suggestion.append("Monitor headway; pre-emptively reduce speed by ~10% if closing")
+
+            # Delay-based recovery suggestion (if safe)
+            if (int(A.get("delay_min", 0)) or 0) >= 5 and d > CRITICAL:
+                suggestion.append("Train " + a_id + " can increase speed by ~10% where safe to recover delay")
+            if (int(B.get("delay_min", 0)) or 0) >= 5 and d > CRITICAL:
+                suggestion.append("Train " + b_id + " can increase speed by ~10% where safe to recover delay")
+
+            alerts.append({
+                "pair": {"a": a_id, "b": b_id},
+                "distance_m": round(d, 1),
+                "relative_speed_mps": round(rel, 2),
+                "same_edge": same,
+                "opposite_edge": opposite,
+                "severity": severity,
+                "suggestions": suggestion,
+            })
+    return alerts
+
+
+async def _alerts_loop(app: FastAPI) -> None:
+    while True:
+        try:
+            await asyncio.sleep(1.0)
+            alerts = _compute_alerts()
+            app.state.alerts = alerts
+            # Broadcast over sim updates channel for frontend popup handling
+            try:
+                await sim._updates.put({"type": "alerts", "data": alerts})  # type: ignore[attr-defined]
+            except Exception:
+                pass
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            await asyncio.sleep(0.5)
+
+
 @app.get("/train/{train_id}/position")
 async def get_train_position(train_id: str) -> Dict[str, Any]:
     p = _locate_train_latlon(train_id)
@@ -553,6 +716,65 @@ async def post_simulate_by_train_no(train_no: str) -> Dict[str, Any]:
     return {"success": True, "train_id": str(train_no), "route": route, "direction": direction}
 
 
+@app.post("/simulate/near_collision")
+async def post_simulate_near_collision() -> Dict[str, Any]:
+    # Spawn two trains on opposing directions on the same edge and place them near-midpoint
+    try:
+        # Choose primary DLI<->NDLS if available; otherwise pick any adjacent station pair
+        def pick_pair() -> Tuple[str, str]:
+            if len(_PRIMARY_MAP) >= 2:
+                u = _PRIMARY_MAP.get("DLI")
+                v = _PRIMARY_MAP.get("NDLS")
+                if u and v and G.has_edge(u, v) and G.has_edge(v, u):
+                    return (u, v)
+            # Fallback: first bidirectional edge
+            for u, v in G.edges():
+                if G.has_edge(v, u):
+                    return (u, v)
+            # Absolute fallback: any edge twice
+            for u, v in G.edges():
+                return (u, v)
+            raise RuntimeError("No edges in graph")
+
+        u, v = pick_pair()
+        if not G.has_edge(u, v):
+            return {"success": False, "error": "no suitable edge found"}
+
+        sim.trains.clear()
+        # Reasonable speed so progress animates
+        spd = 30.0
+        t1 = Train(id="HC1", type=TrainType.EXPRESS, speed_mps=spd, priority=2, route=[u, v], planned_times_min={u: 0})
+        t2 = Train(id="HC2", type=TrainType.EXPRESS, speed_mps=spd, priority=2, route=[v, u], planned_times_min={v: 0})
+        sim.add_train(t1)
+        sim.add_train(t2)
+
+        # Place both near the middle from opposite directions
+        Luv = sim._edge_length(u, v)
+        Lvu = sim._edge_length(v, u)
+        t1.current_edge = (u, v)
+        t2.current_edge = (v, u)
+        t1.position = max(0.0, 0.49 * Luv)
+        t2.position = max(0.0, 0.49 * Lvu)
+        t1.status = "running"
+        t2.status = "running"
+
+        # Compute current distance for response
+        p1 = _locate_train_latlon("HC1")
+        p2 = _locate_train_latlon("HC2")
+        dist = None
+        if p1 and p2:
+            dist = _haversine_m(p1["lat"], p1["lon"], p2["lat"], p2["lon"])  # type: ignore[arg-type]
+        # Push immediate alerts update
+        try:
+            alerts = _compute_alerts()
+            await sim._updates.put({"type": "alerts", "data": alerts})  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        return {"success": True, "edge": {"u": u, "v": v}, "approx_distance_m": round(dist, 1) if dist is not None else None}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 @app.get("/train/{train_no}/corridor_check")
 async def get_train_corridor_check(train_no: str) -> Dict[str, Any]:
     if _df_sched is None:
@@ -604,44 +826,99 @@ async def ws_updates(ws: WebSocket) -> None:
 import math
 import random
 
-# Define train routes as polylines between Delhi stations
+# Define train routes as polylines between Delhi stations (expanded for visibility)
 TRAIN_ROUTES = {
     "TR1": {
         "route": [
-            (28.6430, 77.2190), (28.6460, 77.2210), (28.6500, 77.2230), 
-            (28.6550, 77.2250), (28.6600, 77.2270), (28.6670, 77.2270)
+            (28.6430, 77.2190), (28.6465, 77.2215), (28.6510, 77.2240),
+            (28.6560, 77.2265), (28.6610, 77.2280), (28.6670, 77.2270)
         ],
-        "color": "#ef4444",  # red
-        "speed": 0.008  # progress per update (0.0 to 1.0)
+        "color": "#ef4444",
+        "speed": 0.008
     },
     "TR2": {
         "route": [
-            (28.6670, 77.2270), (28.6600, 77.2350), (28.6500, 77.2450), 
-            (28.6400, 77.2550), (28.6300, 77.2650), (28.6200, 77.2750), 
+            (28.6670, 77.2270), (28.6600, 77.2350), (28.6500, 77.2450),
+            (28.6400, 77.2550), (28.6300, 77.2650), (28.6200, 77.2750),
             (28.6100, 77.2850), (28.6070, 77.2890)
         ],
-        "color": "#3b82f6",  # blue
+        "color": "#3b82f6",
         "speed": 0.006
     },
     "TR3": {
         "route": [
-            (28.6430, 77.2190), (28.6400, 77.2220), (28.6350, 77.2260), 
-            (28.6300, 77.2300), (28.6250, 77.2350), (28.6200, 77.2400), 
-            (28.6150, 77.2450), (28.6100, 77.2500), (28.6050, 77.2550), 
-            (28.6000, 77.2600), (28.5950, 77.2650), (28.5900, 77.2700), 
+            (28.6430, 77.2190), (28.6400, 77.2220), (28.6350, 77.2260),
+            (28.6300, 77.2300), (28.6250, 77.2350), (28.6200, 77.2400),
+            (28.6150, 77.2450), (28.6100, 77.2500), (28.6050, 77.2550),
+            (28.6000, 77.2600), (28.5950, 77.2650), (28.5900, 77.2700),
             (28.5880, 77.2510)
         ],
-        "color": "#10b981",  # green
+        "color": "#10b981",
         "speed": 0.005
     },
     "TR4": {
         "route": [
-            (28.5880, 77.2510), (28.5920, 77.2550), (28.5960, 77.2600), 
-            (28.6000, 77.2650), (28.6040, 77.2700), (28.6080, 77.2750), 
+            (28.5880, 77.2510), (28.5920, 77.2550), (28.5960, 77.2600),
+            (28.6000, 77.2650), (28.6040, 77.2700), (28.6080, 77.2750),
             (28.6100, 77.2800), (28.6120, 77.2850), (28.6070, 77.2890)
         ],
-        "color": "#f59e0b",  # orange
+        "color": "#f59e0b",
         "speed": 0.007
+    },
+    # Added more demo trains and longer paths
+    "TR5": {
+        "route": [
+            (28.6600, 77.2100), (28.6550, 77.2180), (28.6500, 77.2260),
+            (28.6450, 77.2350), (28.6400, 77.2440), (28.6350, 77.2520),
+            (28.6300, 77.2600)
+        ],
+        "color": "#a855f7",
+        "speed": 0.0065
+    },
+    "TR6": {
+        "route": [
+            (28.6300, 77.2600), (28.6350, 77.2680), (28.6400, 77.2760),
+            (28.6450, 77.2840), (28.6500, 77.2900), (28.6550, 77.2940),
+            (28.6600, 77.2960)
+        ],
+        "color": "#22c55e",
+        "speed": 0.0055
+    },
+    "TR7": {
+        "route": [
+            (28.6000, 77.2400), (28.6050, 77.2460), (28.6100, 77.2520),
+            (28.6150, 77.2580), (28.6200, 77.2640), (28.6250, 77.2700),
+            (28.6300, 77.2760), (28.6350, 77.2820)
+        ],
+        "color": "#eab308",
+        "speed": 0.0075
+    },
+    "TR8": {
+        "route": [
+            (28.6350, 77.2820), (28.6300, 77.2760), (28.6250, 77.2700),
+            (28.6200, 77.2640), (28.6150, 77.2580), (28.6100, 77.2520),
+            (28.6050, 77.2460), (28.6000, 77.2400)
+        ],
+        "color": "#f97316",
+        "speed": 0.0068
+    },
+    "TR9": {
+        "route": [
+            (28.6700, 77.2100), (28.6650, 77.2200), (28.6600, 77.2300),
+            (28.6550, 77.2400), (28.6500, 77.2500), (28.6450, 77.2600),
+            (28.6400, 77.2700)
+        ],
+        "color": "#06b6d4",
+        "speed": 0.0062
+    },
+    "TR10": {
+        "route": [
+            (28.6400, 77.2700), (28.6450, 77.2600), (28.6500, 77.2500),
+            (28.6550, 77.2400), (28.6600, 77.2300), (28.6650, 77.2200),
+            (28.6700, 77.2100)
+        ],
+        "color": "#dc2626",
+        "speed": 0.0072
     }
 }
 
@@ -692,8 +969,8 @@ async def _advance_sequence(app: FastAPI) -> None:
     # Initialize train states - start at different positions to avoid gaps
     for train_id, route_data in TRAIN_ROUTES.items():
         _train_states[train_id] = {
-            "progress": random.uniform(0.0, 1.0),  # Start at random positions
-            "direction": 1,  # 1 for forward, -1 for reverse
+            "progress": random.uniform(0.0, 1.0),
+            "direction": 1,
             "color": route_data["color"],
             "speed": route_data["speed"]
         }
@@ -719,6 +996,14 @@ async def _advance_sequence(app: FastAPI) -> None:
                 
                 # Keep progress within bounds
                 state["progress"] = max(0.0, min(1.0, state["progress"]))
+
+            # After updating demo positions, compute alerts and store/broadcast
+            try:
+                alerts = _compute_alerts()
+                app.state.alerts = alerts
+                await sim._updates.put({"type": "alerts", "data": alerts})  # type: ignore[attr-defined]
+            except Exception:
+                pass
             
         except asyncio.CancelledError:
             break
@@ -760,6 +1045,11 @@ async def get_train_positions() -> Dict[str, Any]:
         "routes": list(_route_cache.values()),
         "count": len(positions)
     }
+
+
+@app.get("/safety_alerts")
+async def get_safety_alerts() -> Dict[str, Any]:
+    return {"success": True, "alerts": getattr(app.state, "alerts", [])}
 
 
 if __name__ == "__main__":

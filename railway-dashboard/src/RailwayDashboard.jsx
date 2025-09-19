@@ -11,9 +11,6 @@ import {
   ExclamationTriangleIcon,
   ChartBarIcon,
   Cog6ToothIcon,
-  PlayIcon,
-  PauseIcon,
-  ArrowPathIcon
 } from '@heroicons/react/24/outline'
 
 function FitBounds({ bbox }) {
@@ -47,9 +44,13 @@ export default function RailwayDashboard() {
 	const [stations, setStations] = useState([])
 	const [signals, setSignals] = useState([])
 	const [telemetry, setTelemetry] = useState([])
+	const [alerts, setAlerts] = useState([])
+	const [lastCritical, setLastCritical] = useState(null)
+	const [dismissedAlertKeys, setDismissedAlertKeys] = useState(new Set())
 	const [highlightPairs, setHighlightPairs] = useState(new Set())
 	const [isPlaying, setIsPlaying] = useState(true)
 	const [simTime, setSimTime] = useState(0)
+
 	const [bbox, setBbox] = useState(null)
 	const [error, setError] = useState('')
 	const [connectionMode, setConnectionMode] = useState('')
@@ -146,6 +147,39 @@ export default function RailwayDashboard() {
 							lastTelemetryRef.current = { data, ts }
 							setTelemetry(data)
 							setLastUpdateMs(ts)
+						}
+						if (msg.type === 'alerts' && Array.isArray(msg.data)) {
+							// Merge new alerts into existing list; keep old ones until user dismisses
+							const makeKey = (a) => {
+								const p = a && a.pair ? a.pair : { a: '', b: '' }
+								const s1 = String(p.a || '')
+								const s2 = String(p.b || '')
+								return [s1, s2].sort().join('|')
+							}
+							const incomingByKey = new Map()
+							for (const a of msg.data) {
+								const k = makeKey(a)
+								if (!dismissedAlertKeys.has(k)) incomingByKey.set(k, a)
+							}
+							setAlerts(prev => {
+								const prevByKey = new Map(prev.map(a => [makeKey(a), a]))
+								// Update or add incoming
+								for (const [k, a] of incomingByKey.entries()) {
+									prevByKey.set(k, a)
+								}
+								// Keep previously existing alerts (even if not in incoming) unless dismissed
+								const merged = Array.from(prevByKey.values())
+								// Optional: sort by severity then distance
+								merged.sort((x, y) => {
+									const sv = (s) => s === 'critical' ? 2 : s === 'warn' ? 1 : 0
+									const aS = sv(x.severity), bS = sv(y.severity)
+									if (bS !== aS) return bS - aS
+									return (x.distance_m || 0) - (y.distance_m || 0)
+								})
+								return merged
+							})
+							const critical = msg.data.find(a => a.severity === 'critical' && !dismissedAlertKeys.has(makeKey(a)))
+							if (critical) setLastCritical({ ts: Date.now(), alert: critical })
 						}
 					} catch {}
 				}
@@ -305,6 +339,23 @@ export default function RailwayDashboard() {
 			flexDirection: 'column',
 			background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)'
 		}}>
+			{/* Floating critical alert toast */}
+			{lastCritical && (Date.now() - (lastCritical.ts || 0) < 5000) && (
+				<div style={{ position: 'fixed', top: 16, right: 16, zIndex: 1000 }} className="animate-slide-down">
+					<div className="glass border border-red-400/40" style={{ padding: '12px 14px', borderRadius: 12, minWidth: 320 }}>
+						<div className="flex items-start space-x-3">
+							<ExclamationTriangleIcon style={{ width: '1.25rem', height: '1.25rem' }} className="text-red-400 flex-shrink-0" />
+							<div className="space-y-1">
+								<div className="text-sm font-semibold text-white">Collision risk: {lastCritical.alert.pair.a} ↔ {lastCritical.alert.pair.b}</div>
+								<div className="text-xs text-gray-300">Distance {lastCritical.alert.distance_m} m · Rel speed {lastCritical.alert.relative_speed_mps} m/s</div>
+								<ul className="text-xs text-gray-200 list-disc pl-5">
+									{(lastCritical.alert.suggestions || []).slice(0, 2).map((s, i) => (<li key={i}>{s}</li>))}
+								</ul>
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
 			{/* Header */}
 			<header className="glass border-b border-white/10 animate-slide-down" style={{ flexShrink: 0 }}>
 				<div className="container-fluid py-4">
@@ -314,11 +365,7 @@ export default function RailwayDashboard() {
 								<TruckIcon style={{ width: '1.5rem', height: '1.5rem' }} className="text-blue-400 animate-glow" />
 								<h1 className="text-2xl font-bold text-gradient">Railway Traffic Optimizer</h1>
 							</div>
-							<div className="hidden md:flex items-center space-x-6 text-sm text-gray-300">
-								<div className="flex items-center space-x-2">
-									<ClockIcon style={{ width: '1rem', height: '1rem' }} />
-									<span>Sim Time: {simTime.toFixed ? simTime.toFixed(1) : simTime}s</span>
-								</div>
+								<div className="hidden md:flex items-center space-x-6 text-sm text-gray-300">
 								<div className="flex items-center space-x-2">
 									<TruckIcon style={{ width: '1rem', height: '1rem' }} />
 									<span>{telemetry.length} Trains</span>
@@ -370,8 +417,8 @@ export default function RailwayDashboard() {
 						<TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
 						{/* Railway overlay */}
 						<TileLayer url="https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png" opacity={0.8} attribution="&copy; OpenRailwayMap" />
-                    {bbox && <FitBounds bbox={bbox} />}
-                    {selectedPosition && <CenterOnPosition position={selectedPosition} />}
+					{bbox && <FitBounds bbox={bbox} />}
+					{selectedPosition && <CenterOnPosition position={selectedPosition} />}
 
 					{/* Render edges on top for emphasis */}
 					<Pane name="tracks" style={{ zIndex: 410 }}>
@@ -381,9 +428,9 @@ export default function RailwayDashboard() {
 								<Polyline 
 									key={`track-${e.key}-${index}`} 
 									positions={e.latlngs} 
-									color={occ ? '#ef4444' : '#64748b'} 
-									weight={occ ? 6 : 4} 
-									opacity={occ ? 0.9 : 0.7}
+									color={occ ? '#ef4444' : '#94a3b8'} 
+									weight={occ ? 10 : 6} 
+									opacity={occ ? 0.95 : 0.85}
 									className="transition-all duration-300"
 								/>
 							)
@@ -562,6 +609,40 @@ export default function RailwayDashboard() {
 									<h3 className="text-base font-semibold text-white">Train Timeline</h3>
 								</div>
 								<Timeline trains={telemetry} />
+							</div>
+							
+							{/* Safety Alerts Section */}
+							<div className="space-y-3 animate-fade-in">
+								<div className="flex items-center space-x-2">
+									<ExclamationTriangleIcon style={{ width: '1.25rem', height: '1.25rem' }} className="text-yellow-400" />
+									<h3 className="text-base font-semibold text-white">Safety Alerts</h3>
+								</div>
+								<div className="space-y-2">
+									{alerts.length === 0 && (
+										<div className="text-sm text-gray-400">No alerts</div>
+									)}
+									{alerts.map((a, idx) => (
+										<div key={`${(a?.pair?.a||'')}-${(a?.pair?.b||'')}-${idx}`} className={`glass border ${a.severity === 'critical' ? 'border-red-500/40' : 'border-yellow-500/30'}`} style={{ padding: '10px 12px', borderRadius: 10 }}>
+											<div className="flex items-start justify-between">
+												<div className="space-y-1">
+													<div className="text-sm font-semibold text-white">{a.pair.a} ↔ {a.pair.b} · {a.severity}</div>
+													<div className="text-xs text-gray-300">{a.distance_m} m · rel {a.relative_speed_mps} m/s{a.same_edge ? ' · same edge' : a.opposite_edge ? ' · opposing' : ''}</div>
+													<ul className="text-xs text-gray-200 list-disc pl-5">
+														{(a.suggestions || []).map((s, i) => (<li key={i}>{s}</li>))}
+													</ul>
+												</div>
+												<button onClick={() => {
+													const k = [String(a?.pair?.a||''), String(a?.pair?.b||'')].sort().join('|')
+													setDismissedAlertKeys(prev => new Set([...prev, k]))
+													setAlerts(prev => prev.filter((x) => {
+														const key = [String(x?.pair?.a||''), String(x?.pair?.b||'')].sort().join('|')
+														return key !== k
+													}))
+												}} className="text-xs text-gray-300 hover:text-white">Dismiss</button>
+											</div>
+										</div>
+									))}
+								</div>
 							</div>
 						</div>
 					</div>
