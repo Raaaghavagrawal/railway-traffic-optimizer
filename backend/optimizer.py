@@ -345,3 +345,55 @@ class RailwayCPOptimizer:
             print(f"CP-SAT Solver status: {solver.StatusName(status)}")
 
         return suggestions
+
+
+class ConflictDecisionOptimizer:
+    """Greedy conflict resolver used by the runtime simulation.
+
+    For each contested edge, choose a single winning train. Heuristic:
+    - Higher `priority` first
+    - Prefer EXPRESS over LOCAL over FREIGHT
+    - Prefer train with higher accumulated delay (reduce lateness)
+    - Prefer faster train (higher `speed_mps`)
+    Ties are resolved by deterministic train id ordering for stability.
+    """
+
+    def decide(self, conflicts: List[Dict[str, Any]], trains: Dict[str, Any]) -> Dict[str, str]:
+        decisions: Dict[str, str] = {}
+
+        def type_rank(t: Any) -> int:
+            try:
+                val = str(getattr(t, "type", "")).lower()
+            except Exception:
+                val = ""
+            if "express" in val:
+                return 2
+            if "local" in val:
+                return 1
+            if "freight" in val:
+                return 0
+            return 0
+
+        for conflict in conflicts:
+            edge = conflict.get("edge")
+            train_ids: List[str] = list(conflict.get("trains", []))
+            if not edge or len(train_ids) == 0:
+                continue
+            key = f"{edge[0]}->{edge[1]}"
+
+            def score(tid: str):
+                t = trains.get(tid)
+                if not t:
+                    return (-1, -1, -1, -1, tid)
+                prio = getattr(t, "priority", 0) or 0
+                typ = type_rank(t)
+                delay = getattr(t, "delay_min", 0) or 0
+                speed = getattr(t, "speed_mps", 0.0) or 0.0
+                # Higher is better for all except tie-breaker id which we want ascending
+                return (int(prio), int(typ), int(delay), float(speed), tid)
+
+            # Deterministic winner selection
+            winner = sorted(train_ids, key=score, reverse=True)[0]
+            decisions[key] = winner
+
+        return decisions
