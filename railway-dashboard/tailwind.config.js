@@ -6,6 +6,13 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        'primary': ['Poppins', 'sans-serif'],
+        'secondary': ['Manrope', 'sans-serif'],
+        'display': ['Orbitron', 'sans-serif'],
+        'mono': ['SUSE Mono', 'monospace'],
+        'sans': ['Martel Sans', 'sans-serif'],
+      },
       animation: {
         'shimmer': 'shimmer 2s infinite',
       },

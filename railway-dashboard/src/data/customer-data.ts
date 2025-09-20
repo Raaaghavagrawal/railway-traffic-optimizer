@@ -1,0 +1,42 @@
+export const rows = [
+  {
+    id: 1,
+    name: 'John Doe',
+    email: 'john.doe@example.com',
+    phone: '+1 (555) 123-4567',
+    'billing-address': '123 Main St, New York, NY 10001',
+    'total-spent': 1250.50,
+  },
+  {
+    id: 2,
+    name: 'Jane Smith',
+    email: 'jane.smith@example.com',
+    phone: '+1 (555) 234-5678',
+    'billing-address': '456 Oak Ave, Los Angeles, CA 90210',
+    'total-spent': 890.25,
+  },
+  {
+    id: 3,
+    name: 'Bob Johnson',
+    email: 'bob.johnson@example.com',
+    phone: '+1 (555) 345-6789',
+    'billing-address': '789 Pine Rd, Chicago, IL 60601',
+    'total-spent': 2100.75,
+  },
+  {
+    id: 4,
+    name: 'Alice Brown',
+    email: 'alice.brown@example.com',
+    phone: '+1 (555) 456-7890',
+    'billing-address': '321 Elm St, Houston, TX 77001',
+    'total-spent': 675.00,
+  },
+  {
+    id: 5,
+    name: 'Charlie Wilson',
+    email: 'charlie.wilson@example.com',
+    phone: '+1 (555) 567-8901',
+    'billing-address': '654 Maple Dr, Phoenix, AZ 85001',
+    'total-spent': 1450.30,
+  },
+];

@@ -46,6 +46,7 @@ export default function RailwayDashboard() {
 	const [telemetry, setTelemetry] = useState([])
 	const [alerts, setAlerts] = useState([])
 	const [lastCritical, setLastCritical] = useState(null)
+	const [dismissedCritical, setDismissedCritical] = useState(false)
 	const [dismissedAlertKeys, setDismissedAlertKeys] = useState(new Set())
 	const [highlightPairs, setHighlightPairs] = useState(new Set())
 	const [isPlaying, setIsPlaying] = useState(true)
@@ -179,7 +180,10 @@ export default function RailwayDashboard() {
 								return merged
 							})
 							const critical = msg.data.find(a => a.severity === 'critical' && !dismissedAlertKeys.has(makeKey(a)))
-							if (critical) setLastCritical({ ts: Date.now(), alert: critical })
+							if (critical) {
+								setLastCritical({ ts: Date.now(), alert: critical })
+								setDismissedCritical(false) // Reset dismissed state for new critical alerts
+							}
 						}
 					} catch {}
 				}
@@ -332,86 +336,122 @@ export default function RailwayDashboard() {
 	const center = bbox ? [(bbox.minLat + bbox.maxLat)/2, (bbox.minLon + bbox.maxLon)/2] : [28.6448, 77.2167]
 
 	return (
-		<div style={{ 
-			height: '100vh', 
-			width: '100vw', 
-			display: 'flex', 
-			flexDirection: 'column',
-			background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)'
-		}}>
-			{/* Floating critical alert toast */}
-			{lastCritical && (Date.now() - (lastCritical.ts || 0) < 5000) && (
-				<div style={{ position: 'fixed', top: 16, right: 16, zIndex: 1000 }} className="animate-slide-down">
-					<div className="glass border border-red-400/40" style={{ padding: '12px 14px', borderRadius: 12, minWidth: 320 }}>
-						<div className="flex items-start space-x-3">
-							<ExclamationTriangleIcon style={{ width: '1.25rem', height: '1.25rem' }} className="text-red-400 flex-shrink-0" />
-							<div className="space-y-1">
-								<div className="text-sm font-semibold text-white">Collision risk: {lastCritical.alert.pair.a} ↔ {lastCritical.alert.pair.b}</div>
-								<div className="text-xs text-gray-300">Distance {lastCritical.alert.distance_m} m · Rel speed {lastCritical.alert.relative_speed_mps} m/s</div>
-								<ul className="text-xs text-gray-200 list-disc pl-5">
-									{(lastCritical.alert.suggestions || []).slice(0, 2).map((s, i) => (<li key={i}>{s}</li>))}
-								</ul>
+		<div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 font-primary">
+			<div className="h-screen w-full flex flex-col overflow-hidden animate-fade-in">
+				{/* Floating critical alert toast */}
+				{lastCritical && (Date.now() - (lastCritical.ts || 0) < 5000) && !dismissedCritical && (
+					<div className="fixed top-4 right-4 z-[9999] animate-popup-enter">
+						<div className="bg-gradient-to-r from-slate-800 to-slate-900 border-2 border-red-400 rounded-xl p-4 min-w-80 max-w-sm shadow-2xl shadow-red-500/50 ring-1 ring-red-400 relative">
+							{/* Close button */}
+							<button
+								onClick={() => setDismissedCritical(true)}
+								className="absolute top-2 right-2 text-gray-400 hover:text-white hover:bg-red-500/20 rounded-full p-1 transition-all duration-200 hover:scale-110"
+								aria-label="Close alert"
+							>
+								<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+								</svg>
+							</button>
+							<div className="flex items-start space-x-3">
+								<div className="flex-shrink-0">
+									<div className="w-8 h-8 bg-red-500/20 rounded-full flex items-center justify-center animate-pulse">
+										<ExclamationTriangleIcon className="w-5 h-5 text-red-400" />
+									</div>
+								</div>
+								<div className="space-y-2 flex-1">
+									<div className="flex items-center space-x-2">
+										<div className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
+										<span className="text-xs font-bold text-red-200 uppercase tracking-wide">CRITICAL ALERT</span>
+									</div>
+									<div className="text-base font-bold text-white">
+										Collision Risk: {lastCritical.alert.pair.a} ↔ {lastCritical.alert.pair.b}
+									</div>
+									<div className="text-xs text-gray-200 bg-slate-700 rounded-lg px-2 py-1">
+										Distance: {lastCritical.alert.distance_m}m · Speed: {lastCritical.alert.relative_speed_mps}m/s
+									</div>
+									{(lastCritical.alert.suggestions || []).length > 0 && (
+										<div className="bg-slate-700 border border-red-400 rounded-lg p-2">
+											<p className="text-xs font-semibold text-red-200 mb-1">Actions:</p>
+											<ul className="text-xs text-red-100 space-y-0.5">
+												{(lastCritical.alert.suggestions || []).slice(0, 2).map((s, i) => (
+													<li key={i} className="flex items-start space-x-1">
+														<span className="text-red-400 mt-0.5">•</span>
+														<span>{s}</span>
+													</li>
+												))}
+											</ul>
+										</div>
+									)}
+								</div>
 							</div>
 						</div>
 					</div>
-				</div>
-			)}
-			{/* Header */}
-			<header className="glass border-b border-white/10 animate-slide-down" style={{ flexShrink: 0 }}>
-				<div className="container-fluid py-4">
-					<div className="flex items-center justify-between">
-						<div className="flex items-center space-x-4">
-							<div className="flex items-center space-x-2">
-								<TruckIcon style={{ width: '1.5rem', height: '1.5rem' }} className="text-blue-400 animate-glow" />
-								<h1 className="text-2xl font-bold text-gradient">Railway Traffic Optimizer</h1>
+				)}
+				{/* Header */}
+				<header className="bg-slate-800/50 backdrop-blur-md border-b border-white/10 flex-shrink-0">
+					<div className="px-4 sm:px-6 py-4">
+						<div className="flex items-center justify-between">
+							<div className="flex items-center space-x-4 lg:space-x-6">
+								<div className="flex items-center space-x-3">
+									<div className="p-2 bg-blue-500/20 rounded-lg">
+										<TruckIcon className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400" />
+									</div>
+									<div>
+										<h1 className="text-lg sm:text-xl lg:text-2xl font-display font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+											Railway Traffic Optimizer
+										</h1>
+										<p className="text-xs sm:text-sm text-gray-400 hidden sm:block font-primary">Real-time Railway Network Management</p>
+									</div>
+								</div>
+								<div className="hidden md:flex items-center space-x-4 lg:space-x-8 text-sm">
+									<div className="flex items-center space-x-2 bg-slate-700/50 px-2 lg:px-3 py-2 rounded-lg">
+										<TruckIcon className="w-3 h-3 lg:w-4 lg:h-4 text-green-400" />
+										<span className="text-white font-medium text-xs lg:text-sm">10</span>
+										<span className="text-gray-400 text-xs lg:text-sm hidden lg:inline">Active Trains</span>
+									</div>
+									<div className="flex items-center space-x-2 bg-slate-700/50 px-2 lg:px-3 py-2 rounded-lg">
+										<MapPinIcon className="w-3 h-3 lg:w-4 lg:h-4 text-blue-400"/>
+										<span className="text-white font-medium text-xs lg:text-sm">{Math.min(stations.length, 4)}</span>
+										<span className="text-gray-400 text-xs lg:text-sm hidden lg:inline">Stations</span>
+									</div>
+									<div className="flex items-center space-x-2 bg-slate-700/50 px-2 lg:px-3 py-2 rounded-lg">
+										<ExclamationTriangleIcon className="w-3 h-3 lg:w-4 lg:h-4 text-yellow-400" />
+										<span className="text-white font-medium text-xs lg:text-sm">{signals.length}</span>
+										<span className="text-gray-400 text-xs lg:text-sm hidden lg:inline">Signals</span>
+									</div>
+								</div>
 							</div>
-								<div className="hidden md:flex items-center space-x-6 text-sm text-gray-300">
-								<div className="flex items-center space-x-2">
-									<TruckIcon style={{ width: '1rem', height: '1rem' }} />
-									<span>{telemetry.length} Trains</span>
+							<div className="flex items-center space-x-2 lg:space-x-3">
+								<div className={`px-2 lg:px-3 py-1.5 rounded-full text-xs font-medium ${
+									connectionMode === 'ws' 
+										? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+										: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+								}`}>
+									<div className="flex items-center space-x-1.5">
+										<div className={`w-2 h-2 rounded-full ${
+											connectionMode === 'ws' ? 'bg-green-400 animate-pulse' : 'bg-yellow-400'
+										}`}></div>
+										<span className="hidden sm:inline">{connectionMode === 'ws' ? 'Live' : 'Polling'}</span>
+									</div>
 								</div>
-								<div className="flex items-center space-x-2">
-									<MapPinIcon style={{ width: '1rem', height: '1rem' }} />
-									<span>{stations.length} Stations</span>
-								</div>
-								<div className="flex items-center space-x-2">
-									<ExclamationTriangleIcon style={{ width: '1rem', height: '1rem' }} />
-									<span>{signals.length} Signals</span>
-								</div>
+								{error && (
+									<div className="px-2 lg:px-3 py-1.5 rounded-full text-xs font-medium bg-red-500/20 text-red-400 border border-red-500/30">
+										<div className="flex items-center space-x-1.5">
+											<div className="w-2 h-2 rounded-full bg-red-400"></div>
+											<span className="hidden sm:inline">Error</span>
+										</div>
+									</div>
+								)}
 							</div>
-						</div>
-						<div className="flex items-center space-x-3">
-							<div className={`status-indicator ${
-								connectionMode === 'ws' 
-									? 'status-running' 
-									: 'status-held'
-							}`}>
-								{connectionMode === 'ws' ? 'Live' : 'Polling'}
-							</div>
-							{error && (
-								<div className="status-indicator status-stopped">
-									Connection Error
-								</div>
-							)}
 						</div>
 					</div>
-				</div>
-			</header>
+				</header>
 
-			{/* Main Content */}
-			<div style={{ 
-				flex: 1, 
-				display: 'flex', 
-				minHeight: 0,
-				overflow: 'hidden'
-			}}>
-				{/* Map Section */}
-				<div style={{ 
-					flex: 1, 
-					position: 'relative',
-					minWidth: 0
-				}}>
-					<div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 to-purple-900/20 z-10 pointer-events-none" />
+				{/* Main Content */}
+				<div className="flex-1 flex min-h-0 overflow-hidden">
+					{/* Map Section */}
+					<div className="flex-1 relative min-w-0">
+						<div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 to-purple-900/20 z-10 pointer-events-none" />
 					<MapContainer center={center} zoom={14} className="w-full h-full" preferCanvas>
 						{/* Base OSM */}
 						<TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
@@ -453,7 +493,7 @@ export default function RailwayDashboard() {
 
 					{/* Stations */}
 					<Pane name="stations" style={{ zIndex: 420 }}>
-						{stations.map((s, index) => (
+						{stations.slice(0, 10).map((s, index) => (
 							<Rectangle 
 								key={`station-${s.id}-${index}`} 
 								bounds={[[s.lat - 0.00005, s.lon - 0.00005],[s.lat + 0.00005, s.lon + 0.00005]]} 
@@ -518,17 +558,33 @@ export default function RailwayDashboard() {
 								icon={L.divIcon({ 
 									className: 'train-icon', 
 									html: `
-										<div class="train-marker-container" style="display:flex;align-items:center;gap:4px;">
-											<div style="font-size:18px;line-height:1;">🚆</div>
-											<div class="train-marker-label">${t.id}</div>
+										<div class="train-marker-container" style="
+											display: flex;
+											align-items: center;
+											gap: 6px;
+											background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+											padding: 6px 12px;
+											border-radius: 20px;
+											border: 2px solid #ffffff;
+											box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+											transition: all 0.3s ease;
+											cursor: pointer;
+										">
+											<div style="font-size: 16px; line-height: 1;">🚆</div>
+											<div style="
+												color: white;
+												font-weight: 600;
+												font-size: 12px;
+												text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+											">${t.id}</div>
 										</div>
 									` 
 								})}
 							>
 								<Tooltip direction="right" offset={[8,0]} opacity={1} className="custom-tooltip">
-									<div className="custom-tooltip">
-										<div className="font-semibold">{t.id}</div>
-										<div className="text-sm text-gray-600 capitalize">{t.status}</div>
+									<div className="bg-slate-800/95 backdrop-blur-md border border-white/20 rounded-lg p-3 shadow-xl">
+										<div className="font-semibold text-white text-sm">{t.id}</div>
+										<div className="text-xs text-gray-300 capitalize mt-1">{t.status}</div>
 									</div>
 								</Tooltip>
 							</Marker>
@@ -545,31 +601,42 @@ export default function RailwayDashboard() {
 									className: 'train-icon',
 									html: `
 										<div class="train-marker-container" style="
-											display:flex;align-items:center;gap:4px;
-											background:rgba(255,255,255,0.95);
-											padding:3px 8px;border-radius:15px;
-											border:3px solid ${p.color || '#3b82f6'};
-											box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-											transition: all 0.2s ease;
+											display: flex;
+											align-items: center;
+											gap: 6px;
+											background: linear-gradient(135deg, ${p.color || '#3b82f6'} 0%, ${p.color || '#1e40af'} 100%);
+											padding: 8px 14px;
+											border-radius: 25px;
+											border: 3px solid #ffffff;
+											box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+											transition: all 0.3s ease;
+											cursor: pointer;
+											animation: pulse 2s infinite;
 										">
-											<div style="font-size:18px;line-height:1;">🚆</div>
-											<div class="train-marker-label" style="
-												font-weight:bold;
-												color:${p.color || '#1e40af'};
-												font-size:12px;
+											<div style="font-size: 18px; line-height: 1;">🚆</div>
+											<div style="
+												color: white;
+												font-weight: 700;
+												font-size: 13px;
+												text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 											">${p.train_id}</div>
 										</div>
 									`
 								})}
 							>
 								<Tooltip direction="right" offset={[8,0]} opacity={1} className="custom-tooltip">
-									<div className="custom-tooltip">
-										<div className="font-semibold">{p.train_id}</div>
-										<div className="text-sm text-gray-600">
-											Progress: {Math.round((p.progress || 0) * 100)}%
-										</div>
-										<div className="text-sm text-gray-600">
-											Direction: {p.direction > 0 ? 'Forward' : 'Reverse'}
+									<div className="bg-slate-800/95 backdrop-blur-md border border-white/20 rounded-lg p-4 shadow-xl min-w-48">
+										<div className="font-semibold text-white text-sm mb-2">{p.train_id}</div>
+										<div className="space-y-1">
+											<div className="text-xs text-gray-300">
+												Progress: <span className="text-blue-400 font-medium">{Math.round((p.progress || 0) * 100)}%</span>
+											</div>
+											<div className="text-xs text-gray-300">
+												Direction: <span className="text-green-400 font-medium">{p.direction > 0 ? 'Forward' : 'Reverse'}</span>
+											</div>
+											<div className="text-xs text-gray-300">
+												Status: <span className="text-yellow-400 font-medium">Live</span>
+											</div>
 										</div>
 									</div>
 								</Tooltip>
@@ -579,69 +646,142 @@ export default function RailwayDashboard() {
 					</MapContainer>
 				</div>
 
-				{/* Control Panel */}
-				<div className="glass border-l border-white/10 overflow-hidden animate-slide-up" style={{ 
-					width: '24rem',
-					flexShrink: 0,
-					height: '100%'
-				}}>
-					<div style={{ 
-						height: '100%', 
-						display: 'flex', 
-						flexDirection: 'column' 
-					}}>
-						{/* Panel Header */}
-						<div className="card-header">
-							<div className="flex items-center space-x-2">
-								<Cog6ToothIcon style={{ width: '1.25rem', height: '1.25rem' }} className="text-blue-400 animate-float" />
-								<h2 className="card-title">Control Center</h2>
+					{/* Control Panel */}
+					<div className="w-80 lg:w-96 bg-slate-800/50 backdrop-blur-md border-l border-white/10 flex-shrink-0 h-full overflow-hidden">
+						<div className="h-full flex flex-col">
+							{/* Panel Header */}
+							<div className="bg-slate-700/50 border-b border-white/10 px-4 lg:px-6 py-4">
+								<div className="flex items-center space-x-3">
+									<div className="p-2 bg-blue-500/20 rounded-lg">
+										<Cog6ToothIcon className="w-4 h-4 lg:w-5 lg:h-5 text-blue-400" />
+									</div>
+									<div>
+										<h2 className="text-base lg:text-lg font-display font-semibold text-white">Control Center</h2>
+										<p className="text-xs text-gray-400 hidden sm:block font-primary">Railway Network Management</p>
+									</div>
+								</div>
 							</div>
-						</div>
 
-						{/* Panel Content */}
-						<div className="flex-1 overflow-auto p-6 space-y-6">
-							<ControlPanel />
-							
-							{/* Timeline Section */}
-							<div className="space-y-3 animate-fade-in">
-								<div className="flex items-center space-x-2">
-									<ChartBarIcon style={{ width: '1.25rem', height: '1.25rem' }} className="text-blue-400" />
-									<h3 className="text-base font-semibold text-white">Train Timeline</h3>
-								</div>
-								<Timeline trains={telemetry} />
-							</div>
-							
-							{/* Safety Alerts Section */}
-							<div className="space-y-3 animate-fade-in">
-								<div className="flex items-center space-x-2">
-									<ExclamationTriangleIcon style={{ width: '1.25rem', height: '1.25rem' }} className="text-yellow-400" />
-									<h3 className="text-base font-semibold text-white">Safety Alerts</h3>
-								</div>
-								<div className="space-y-2">
-									{alerts.length === 0 && (
-										<div className="text-sm text-gray-400">No alerts</div>
-									)}
-									{alerts.map((a, idx) => (
-										<div key={`${(a?.pair?.a||'')}-${(a?.pair?.b||'')}-${idx}`} className={`glass border ${a.severity === 'critical' ? 'border-red-500/40' : 'border-yellow-500/30'}`} style={{ padding: '10px 12px', borderRadius: 10 }}>
-											<div className="flex items-start justify-between">
-												<div className="space-y-1">
-													<div className="text-sm font-semibold text-white">{a.pair.a} ↔ {a.pair.b} · {a.severity}</div>
-													<div className="text-xs text-gray-300">{a.distance_m} m · rel {a.relative_speed_mps} m/s{a.same_edge ? ' · same edge' : a.opposite_edge ? ' · opposing' : ''}</div>
-													<ul className="text-xs text-gray-200 list-disc pl-5">
-														{(a.suggestions || []).map((s, i) => (<li key={i}>{s}</li>))}
-													</ul>
-												</div>
-												<button onClick={() => {
-													const k = [String(a?.pair?.a||''), String(a?.pair?.b||'')].sort().join('|')
-													setDismissedAlertKeys(prev => new Set([...prev, k]))
-													setAlerts(prev => prev.filter((x) => {
-														const key = [String(x?.pair?.a||''), String(x?.pair?.b||'')].sort().join('|')
-														return key !== k
-													}))
-												}} className="text-xs text-gray-300 hover:text-white">Dismiss</button>
-											</div>
+							{/* Panel Content */}
+							<div className="flex-1 overflow-auto p-4 lg:p-6 space-y-4 lg:space-y-6">
+								<ControlPanel />
+								
+								{/* Timeline Section */}
+								<div className="space-y-4">
+									<div className="flex items-center space-x-3">
+										<div className="p-1.5 bg-blue-500/20 rounded-lg">
+											<ChartBarIcon className="w-4 h-4 text-blue-400" />
 										</div>
-									))}
+										<h3 className="text-base font-semibold text-white">Train Timeline</h3>
+									</div>
+									<div className="bg-slate-700/30 rounded-lg p-4">
+										<Timeline trains={telemetry} />
+									</div>
+								</div>
+								
+								{/* Safety Alerts Section */}
+								<div className="space-y-4">
+									<div className="flex items-center space-x-3">
+										<div className="p-2 bg-yellow-500/20 rounded-lg animate-pulse">
+											<ExclamationTriangleIcon className="w-5 h-5 text-yellow-400" />
+										</div>
+										<h3 className="text-lg font-display font-bold text-white">Safety Alerts</h3>
+										{alerts.length > 0 && (
+											<div className="bg-red-500/20 text-red-300 px-2 py-1 rounded-full text-xs font-bold animate-pulse">
+												{alerts.length} Active
+											</div>
+										)}
+									</div>
+									<div className="space-y-3">
+										{alerts.length === 0 && (
+											<div className="text-center py-12 text-gray-400 animate-bounce-in">
+												<div className="w-16 h-16 mx-auto mb-4 bg-gray-600/30 rounded-full flex items-center justify-center animate-pulse">
+													<ExclamationTriangleIcon className="w-8 h-8 text-gray-500" />
+												</div>
+												<p className="text-sm font-primary">No active alerts</p>
+												<p className="text-xs text-gray-500 mt-1">System monitoring in progress...</p>
+											</div>
+										)}
+										{alerts.map((a, idx) => (
+											<div 
+												key={`${(a?.pair?.a||'')}-${(a?.pair?.b||'')}-${idx}`} 
+												className={`animate-bounce-in border-2 rounded-2xl p-5 transition-all duration-300 hover:scale-[1.02] ${
+													a.severity === 'critical' 
+														? 'border-red-500 bg-gradient-to-r from-slate-800 to-slate-900 shadow-lg shadow-red-500/50' 
+														: 'border-yellow-500 bg-gradient-to-r from-slate-800 to-slate-900 shadow-lg shadow-yellow-500/50'
+												}`}
+												style={{ animationDelay: `${idx * 100}ms` }}
+											>
+												<div className="flex items-start justify-between">
+													<div className="space-y-3 flex-1">
+														<div className="flex items-center space-x-3">
+															<div className={`w-3 h-3 rounded-full ${
+																a.severity === 'critical' ? 'bg-red-400 animate-pulse' : 'bg-yellow-400 animate-pulse'
+															}`}></div>
+															<span className="text-base font-bold text-white font-display">
+																{a.pair.a} ↔ {a.pair.b}
+															</span>
+															<span className={`text-xs px-3 py-1 rounded-full font-bold uppercase tracking-wide ${
+																a.severity === 'critical' 
+																	? 'bg-red-500/30 text-red-200 border border-red-400/40' 
+																	: 'bg-yellow-500/30 text-yellow-200 border border-yellow-400/40'
+															}`}>
+																{a.severity}
+															</span>
+														</div>
+														<div className="bg-slate-800 rounded-lg p-3 space-y-2">
+															<p className="text-sm text-gray-200 font-medium">
+																Distance: {a.distance_m}m · Speed: {a.relative_speed_mps}m/s
+															</p>
+															{a.same_edge && (
+																<div className="flex items-center space-x-2 text-yellow-400 bg-yellow-800 rounded-lg px-3 py-2">
+																	<span className="text-lg">⚠️</span>
+																	<span className="text-sm font-medium">Same track</span>
+																</div>
+															)}
+															{a.opposite_edge && (
+																<div className="flex items-center space-x-2 text-red-400 bg-red-800 rounded-lg px-3 py-2">
+																	<span className="text-lg">🚨</span>
+																	<span className="text-sm font-medium">Opposing direction</span>
+																</div>
+															)}
+														</div>
+														{(a.suggestions || []).length > 0 && (
+															<div className="bg-slate-700 border border-slate-600 rounded-lg p-4">
+																<p className="text-sm font-bold text-gray-200 mb-3 flex items-center space-x-2">
+																	<span>💡</span>
+																	<span>Recommended Actions:</span>
+																</p>
+																<ul className="space-y-2">
+																	{(a.suggestions || []).map((s, i) => (
+																		<li key={i} className="flex items-start space-x-3 text-sm text-gray-100">
+																			<span className="text-blue-400 mt-1 font-bold">{i + 1}.</span>
+																			<span>{s}</span>
+																		</li>
+																	))}
+																</ul>
+															</div>
+														)}
+													</div>
+													<button 
+														onClick={() => {
+															const k = [String(a?.pair?.a||''), String(a?.pair?.b||'')].sort().join('|')
+															setDismissedAlertKeys(prev => new Set([...prev, k]))
+															setAlerts(prev => prev.filter((x) => {
+																const key = [String(x?.pair?.a||''), String(x?.pair?.b||'')].sort().join('|')
+																return key !== k
+															}))
+														}} 
+														className="text-gray-400 hover:text-white hover:bg-red-500/20 rounded-full p-2 transition-all duration-200 hover:scale-110"
+													>
+														<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+														</svg>
+													</button>
+												</div>
+											</div>
+										))}
+									</div>
 								</div>
 							</div>
 						</div>

@@ -10,7 +10,9 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   MagnifyingGlassIcon,
-  MapPinIcon
+  MapPinIcon,
+  Cog6ToothIcon,
+  TruckIcon
 } from '@heroicons/react/24/outline'
 
 export default function ControlPanel() {
@@ -177,39 +179,63 @@ export default function ControlPanel() {
 	}
 
 	return (
-		<div className="space-y-6">
+		<div className="space-y-4 lg:space-y-6">
 			{/* Train Search */}
-			<div className="card animate-fade-in">
-				<div className="flex items-center space-x-2 mb-3">
-					<MagnifyingGlassIcon style={{ width: '1.0rem', height: '1.0rem' }} className="text-blue-400" />
-					<h3 className="text-sm font-semibold text-white">Search Train</h3>
+			<div className="bg-slate-700/30 rounded-xl p-3 lg:p-4 border border-white/10">
+				<div className="flex items-center space-x-3 mb-3 lg:mb-4">
+					<div className="p-1.5 bg-blue-500/20 rounded-lg">
+						<MagnifyingGlassIcon className="w-3 h-3 lg:w-4 lg:h-4 text-blue-400" />
+					</div>
+					<h3 className="text-xs lg:text-sm font-display font-semibold text-white">Search Train</h3>
 				</div>
-				<div className="flex space-x-2 mb-3">
+				<div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 mb-3 lg:mb-4">
 					<input 
 						value={query}
 						onChange={(e) => setQuery(e.target.value)}
 						placeholder="Enter train number or name"
-						className="input flex-1"
+						className="flex-1 px-3 py-2 bg-slate-600/50 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all text-sm font-primary"
 					/>
-					<button onClick={search} className="btn btn-primary hover-lift">Search</button>
+					<button 
+						onClick={search} 
+						className="px-3 lg:px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors flex items-center justify-center space-x-2 text-sm font-primary"
+					>
+						<MagnifyingGlassIcon className="w-3 h-3 lg:w-4 lg:h-4" />
+						<span className="hidden sm:inline">Search</span>
+					</button>
 				</div>
 				{results.length > 0 && (
 					<div className="space-y-2 max-h-40 overflow-auto">
 						{results.map((r, idx) => (
 							<div 
 								key={`${r.Train_No}-${idx}`} 
-								className={`w-full px-3 py-2 rounded border ${selected?.Train_No === r.Train_No ? 'border-blue-500 bg-blue-500/10' : 'border-white/10 hover:border-white/20'} text-white`}
+								className={`w-full p-3 rounded-lg border transition-all ${
+									selected?.Train_No === r.Train_No 
+										? 'border-blue-500 bg-blue-500/10' 
+										: 'border-white/10 hover:border-white/20 bg-slate-600/30'
+								}`}
 							>
 								<div className="flex items-center justify-between">
-									<button onClick={() => { setSelected(r); loadSchedule(r.Train_No) }} className="text-left flex-1">
-										<div className="flex items-center gap-2">
-											<span role="img" aria-label="train">🚆</span>
-											<div className="font-mono">{r.Train_No}</div>
-											<div className="truncate ml-2 flex-1">{r.Train_Name}</div>
+									<button 
+										onClick={() => { setSelected(r); loadSchedule(r.Train_No) }} 
+										className="text-left flex-1"
+									>
+										<div className="flex items-center gap-3">
+											<span role="img" aria-label="train" className="text-lg">🚆</span>
+											<div>
+												<div className="font-mono text-white font-medium">{r.Train_No}</div>
+												<div className="text-sm text-gray-300 truncate font-primary">{r.Train_Name}</div>
+											</div>
 										</div>
-										<div className="text-xs text-gray-300">{r.Source_Station_Name} → {r.Destination_Station_Name} · {r.days}</div>
+										<div className="text-xs text-gray-400 mt-1 font-primary">
+											{r.Source_Station_Name} → {r.Destination_Station_Name} · {r.days}
+										</div>
 									</button>
-									<button onClick={() => simulateByTrainNo(r.Train_No)} className="btn btn-primary hover-lift" style={{ fontSize: '0.75rem', marginLeft: '0.5rem' }}>Simulate</button>
+									<button 
+										onClick={() => simulateByTrainNo(r.Train_No)} 
+										className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs font-medium transition-colors ml-2"
+									>
+										Simulate
+									</button>
 								</div>
 							</div>
 						))}
@@ -251,100 +277,50 @@ export default function ControlPanel() {
 				)}
 			</div>
 
-			{/* Control Actions */}
-			<div className="card animate-scale-in">
-				<div className="flex items-center justify-between mb-4">
-					<h3 className="text-sm font-semibold text-white">System Controls</h3>
-					<div className="flex items-center space-x-2">
-						{optimizing && (
-							<div className="flex items-center space-x-1 text-blue-400">
-								<div className="loading-spinner h-3 w-3"></div>
-								<span className="text-xs">Optimizing</span>
-							</div>
-						)}
-					</div>
-				</div>
-				<div className="flex space-x-3">
-				<button 
-						onClick={runOptimizer} 
-						disabled={optimizing}
-						className="btn btn-primary hover-lift"
-						style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
-					>
-						<ChartBarIcon style={{ width: '1rem', height: '1rem' }} />
-						<span>{optimizing ? 'Optimizing...' : 'Run AI Optimizer'}</span>
-					</button>
-					<button 
-						onClick={() => postControl({ command: 'reset' })}
-						className="btn btn-secondary hover-lift"
-						style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
-					>
-						<ArrowPathIcon style={{ width: '1rem', height: '1rem' }} />
-					</button>
-					<button 
-						onClick={() => postControl({ command: 'reseed' })}
-						className="btn btn-primary hover-lift"
-						style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
-						title="Seed 10 Delhi trains"
-					>
-						<span>Seed Delhi Trains</span>
-					</button>
-					<button 
-						onClick={() => setPlaying(true)}
-						className="btn btn-secondary hover-lift"
-						style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}
-						title="Play"
-					>
-						<PlayIcon style={{ width: '1rem', height: '1rem' }} />
-					</button>
-					<button 
-						onClick={() => setPlaying(false)}
-						className="btn btn-secondary hover-lift"
-						style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}
-						title="Pause"
-					>
-						<PauseIcon style={{ width: '1rem', height: '1rem' }} />
-					</button>
-				</div>
-			</div>
 
 			{/* Metrics Cards */}
-			<div className="grid grid-cols-1 gap-3">
-				<div className="card hover-lift animate-slide-up">
-					<div className="flex items-center justify-between mb-2">
-						<div className="flex items-center space-x-2">
-							<ClockIcon style={{ width: '1rem', height: '1rem' }} className="text-orange-400 animate-pulse" />
-							<span className="text-xs font-medium text-gray-300">Average Delay</span>
+			<div className="grid grid-cols-1 gap-4">
+				<div className="bg-slate-700/30 rounded-xl p-4 border border-white/10 hover:border-orange-500/30 transition-all">
+					<div className="flex items-center justify-between mb-3">
+						<div className="flex items-center space-x-3">
+							<div className="p-2 bg-orange-500/20 rounded-lg">
+								<ClockIcon className="w-4 h-4 text-orange-400" />
+							</div>
+							<span className="text-sm font-medium text-gray-300">Average Delay</span>
 						</div>
-						<ExclamationTriangleIcon style={{ width: '1rem', height: '1rem' }} className="text-orange-400" />
+						<ExclamationTriangleIcon className="w-4 h-4 text-orange-400" />
 					</div>
-					<div className="text-2xl font-bold text-gradient-warning">
+					<div className="text-2xl font-bold text-orange-400">
 						{(metrics.avgDelay || 0).toFixed ? (metrics.avgDelay || 0).toFixed(1) : metrics.avgDelay}s
 					</div>
 					<div className="text-xs text-gray-400 mt-1">Total delay across all trains</div>
 				</div>
 
-				<div className="card hover-lift animate-slide-up" style={{ animationDelay: '0.1s' }}>
-					<div className="flex items-center justify-between mb-2">
-						<div className="flex items-center space-x-2">
-							<ChartBarIcon style={{ width: '1rem', height: '1rem' }} className="text-green-400 animate-pulse" />
-							<span className="text-xs font-medium text-gray-300">Throughput</span>
+				<div className="bg-slate-700/30 rounded-xl p-4 border border-white/10 hover:border-green-500/30 transition-all">
+					<div className="flex items-center justify-between mb-3">
+						<div className="flex items-center space-x-3">
+							<div className="p-2 bg-green-500/20 rounded-lg">
+								<ChartBarIcon className="w-4 h-4 text-green-400" />
+							</div>
+							<span className="text-sm font-medium text-gray-300">Throughput</span>
 						</div>
-						<CheckCircleIcon style={{ width: '1rem', height: '1rem' }} className="text-green-400" />
+						<CheckCircleIcon className="w-4 h-4 text-green-400" />
 					</div>
-					<div className="text-2xl font-bold text-gradient-success">{metrics.throughput}</div>
+					<div className="text-2xl font-bold text-green-400">{metrics.throughput}</div>
 					<div className="text-xs text-gray-400 mt-1">Trains per hour</div>
 				</div>
 
-				<div className="card hover-lift animate-slide-up" style={{ animationDelay: '0.2s' }}>
-					<div className="flex items-center justify-between mb-2">
-						<div className="flex items-center space-x-2">
-							<PlayIcon style={{ width: '1rem', height: '1rem' }} className="text-blue-400 animate-pulse" />
-							<span className="text-xs font-medium text-gray-300">Avg Speed</span>
+				<div className="bg-slate-700/30 rounded-xl p-4 border border-white/10 hover:border-blue-500/30 transition-all">
+					<div className="flex items-center justify-between mb-3">
+						<div className="flex items-center space-x-3">
+							<div className="p-2 bg-blue-500/20 rounded-lg">
+								<PlayIcon className="w-4 h-4 text-blue-400" />
+							</div>
+							<span className="text-sm font-medium text-gray-300">Avg Speed</span>
 						</div>
-						<CheckCircleIcon style={{ width: '1rem', height: '1rem' }} className="text-blue-400" />
+						<CheckCircleIcon className="w-4 h-4 text-blue-400" />
 					</div>
-					<div className="text-2xl font-bold text-gradient">
+					<div className="text-2xl font-bold text-blue-400">
 						{(metrics.avgSpeed || 0).toFixed ? (metrics.avgSpeed || 0).toFixed(1) : metrics.avgSpeed} m/s
 					</div>
 					<div className="text-xs text-gray-400 mt-1">Average train speed</div>
@@ -352,68 +328,71 @@ export default function ControlPanel() {
 			</div>
 
 			{/* Train Status Table */}
-			<div className="card overflow-hidden animate-fade-in">
-				<div className="card-header">
-					<h3 className="text-sm font-semibold text-white">Train Status</h3>
+			<div className="bg-slate-700/30 rounded-xl border border-white/10 overflow-hidden">
+				<div className="bg-slate-600/50 px-4 py-3 border-b border-white/10">
+					<div className="flex items-center space-x-3">
+						<div className="p-1.5 bg-purple-500/20 rounded-lg">
+							<TruckIcon className="w-4 h-4 text-purple-400" />
+						</div>
+						<h3 className="text-sm font-semibold text-white">Train Status</h3>
+					</div>
 				</div>
 				<div className="overflow-auto max-h-64">
-					<table className="table">
-						<thead className="table-header">
+					<table className="w-full">
+						<thead className="bg-slate-600/30">
 							<tr>
-								<th>Train</th>
-								<th>Status</th>
-								<th className="text-right">Speed</th>
-								<th className="text-right">Delay</th>
-								<th className="text-center">Actions</th>
+								<th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Train</th>
+								<th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
+								<th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Speed</th>
+								<th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Delay</th>
+								<th className="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
 							</tr>
 						</thead>
-						<tbody className="table-body">
+						<tbody className="divide-y divide-white/10">
 							{trains.map((tr, index) => (
-								<tr key={tr.train_id} className="table-row animate-slide-up" style={{ animationDelay: `${index * 0.1}s` }}>
-									<td className="table-cell">
-										<div className="flex items-center space-x-2">
-											<div className={`w-2 h-2 rounded-full ${
+								<tr key={tr.train_id} className="hover:bg-slate-600/20 transition-colors">
+									<td className="px-4 py-3">
+										<div className="flex items-center space-x-3">
+											<div className={`w-3 h-3 rounded-full ${
 												tr.state === 'running' ? 'bg-green-400 animate-pulse' :
 												tr.state === 'stopped' ? 'bg-red-400' :
 												tr.state === 'held' ? 'bg-yellow-400' : 'bg-gray-400'
 											}`}></div>
-											<span className="font-mono text-white">{tr.train_id}</span>
+											<span className="font-mono text-white font-medium">{tr.train_id}</span>
 										</div>
 									</td>
-									<td className="table-cell">
-										<span className={`status-indicator ${
-											tr.state === 'running' ? 'status-running' :
-											tr.state === 'stopped' ? 'status-stopped' :
-											tr.state === 'held' ? 'status-held' : 'status-delayed'
-										}` }>
+									<td className="px-4 py-3">
+										<span className={`px-2 py-1 rounded-full text-xs font-medium ${
+											tr.state === 'running' ? 'bg-green-500/20 text-green-300' :
+											tr.state === 'stopped' ? 'bg-red-500/20 text-red-300' :
+											tr.state === 'held' ? 'bg-yellow-500/20 text-yellow-300' : 'bg-gray-500/20 text-gray-300'
+										}`}>
 											{tr.state || 'unknown'}
 										</span>
 									</td>
-									<td className="table-cell text-right text-white">
+									<td className="px-4 py-3 text-right text-white font-medium">
 										{(tr.speed_mps || 0).toFixed ? (tr.speed_mps || 0).toFixed(1) : (tr.speed_mps || 0)} m/s
 									</td>
-									<td className="table-cell text-right text-white">
+									<td className="px-4 py-3 text-right text-white font-medium">
 										{(tr.delay_s || 0).toFixed ? (tr.delay_s || 0).toFixed(0) : (tr.delay_s || 0)}s
 									</td>
-									<td className="table-cell text-center">
+									<td className="px-4 py-3 text-center">
 										<div className="flex items-center justify-center gap-2">
 											<button 
 												onClick={() => {
 													const mins = prompt('Delay minutes?', '1')
 													if (mins != null) postControl({ command: 'delay', train_id: tr.train_id, delay_min: parseInt(mins) || 1 })
 												}} 
-												className="btn btn-warning hover-lift"
-												style={{ fontSize: '0.75rem' }}
+												className="px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-white rounded text-xs font-medium transition-colors"
 											>
 												Delay
 											</button>
 											<button 
 												onClick={() => locateTrainNow(tr.train_id)} 
-												className="btn btn-secondary hover-lift"
-												style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+												className="px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-colors flex items-center gap-1"
 												title="Locate now"
 											>
-												<MapPinIcon style={{ width: '0.9rem', height: '0.9rem' }} />
+												<MapPinIcon className="w-3 h-3" />
 												Locate
 											</button>
 										</div>
@@ -426,9 +405,11 @@ export default function ControlPanel() {
 			</div>
 
 			{/* Performance Chart */}
-			<div className="card animate-fade-in">
-				<div className="flex items-center space-x-2 mb-4">
-					<ChartBarIcon style={{ width: '1rem', height: '1rem' }} className="text-blue-400 animate-float" />
+			<div className="bg-slate-700/30 rounded-xl p-4 border border-white/10">
+				<div className="flex items-center space-x-3 mb-4">
+					<div className="p-1.5 bg-blue-500/20 rounded-lg">
+						<ChartBarIcon className="w-4 h-4 text-blue-400" />
+					</div>
 					<h3 className="text-sm font-semibold text-white">Performance Metrics</h3>
 				</div>
 				<div className="h-48">
@@ -439,7 +420,7 @@ export default function ControlPanel() {
 							<YAxis tick={{ fill: '#9ca3af', fontSize: 10 }} />
 							<Tooltip 
 								contentStyle={{ 
-									background: 'rgba(0, 0, 0, 0.8)', 
+									background: 'rgba(15, 23, 42, 0.95)', 
 									border: '1px solid rgba(255, 255, 255, 0.1)',
 									borderRadius: '8px',
 									backdropFilter: 'blur(10px)'
@@ -457,10 +438,10 @@ export default function ControlPanel() {
 
 			{/* Error Display */}
 			{error && (
-				<div className="card bg-red-500/10 border-red-500/20 animate-scale-in">
-					<div className="flex items-center space-x-2">
-						<XCircleIcon style={{ width: '1rem', height: '1rem' }} className="text-red-400 animate-pulse" />
-						<span className="text-sm text-red-400">{error}</span>
+				<div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4">
+					<div className="flex items-center space-x-3">
+						<XCircleIcon className="w-5 h-5 text-red-400 animate-pulse" />
+						<span className="text-sm text-red-400 font-medium">{error}</span>
 					</div>
 				</div>
 			)}
