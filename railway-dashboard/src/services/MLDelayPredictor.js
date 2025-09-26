@@ -62,7 +62,7 @@ class MLDelayPredictor {
     // Simple linear regression model for demonstration
     // In production, this would use TensorFlow.js or similar
     const weights = new Array(this.features.length).fill(0)
-    const bias = 0
+    let bias = 0
     const learningRate = 0.01
     const epochs = 100
 
