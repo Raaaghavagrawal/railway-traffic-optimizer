@@ -17,6 +17,43 @@ code, pre {
   @apply font-mono;
 }
 
+/* Custom Scrollbar Styles */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #3b82f6 #1e293b;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: #1e293b;
+  border-radius: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #3b82f6;
+  border-radius: 4px;
+  border: 1px solid #1e293b;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #2563eb;
+}
+
+.scrollbar-thumb-blue-500::-webkit-scrollbar-thumb {
+  background: #3b82f6;
+}
+
+.scrollbar-track-slate-700::-webkit-scrollbar-track {
+  background: #334155;
+}
+
+.hover\:scrollbar-thumb-blue-400:hover::-webkit-scrollbar-thumb {
+  background: #60a5fa;
+}
+
 /* Custom Animations */
 @keyframes fadeIn {
   from {

@@ -278,54 +278,6 @@ export default function ControlPanel() {
 			</div>
 
 
-			{/* Metrics Cards */}
-			<div className="grid grid-cols-1 gap-4">
-				<div className="bg-slate-700/30 rounded-xl p-4 border border-white/10 hover:border-orange-500/30 transition-all">
-					<div className="flex items-center justify-between mb-3">
-						<div className="flex items-center space-x-3">
-							<div className="p-2 bg-orange-500/20 rounded-lg">
-								<ClockIcon className="w-4 h-4 text-orange-400" />
-							</div>
-							<span className="text-sm font-medium text-gray-300">Average Delay</span>
-						</div>
-						<ExclamationTriangleIcon className="w-4 h-4 text-orange-400" />
-					</div>
-					<div className="text-2xl font-bold text-orange-400">
-						{(metrics.avgDelay || 0).toFixed ? (metrics.avgDelay || 0).toFixed(1) : metrics.avgDelay}s
-					</div>
-					<div className="text-xs text-gray-400 mt-1">Total delay across all trains</div>
-				</div>
-
-				<div className="bg-slate-700/30 rounded-xl p-4 border border-white/10 hover:border-green-500/30 transition-all">
-					<div className="flex items-center justify-between mb-3">
-						<div className="flex items-center space-x-3">
-							<div className="p-2 bg-green-500/20 rounded-lg">
-								<ChartBarIcon className="w-4 h-4 text-green-400" />
-							</div>
-							<span className="text-sm font-medium text-gray-300">Throughput</span>
-						</div>
-						<CheckCircleIcon className="w-4 h-4 text-green-400" />
-					</div>
-					<div className="text-2xl font-bold text-green-400">{metrics.throughput}</div>
-					<div className="text-xs text-gray-400 mt-1">Trains per hour</div>
-				</div>
-
-				<div className="bg-slate-700/30 rounded-xl p-4 border border-white/10 hover:border-blue-500/30 transition-all">
-					<div className="flex items-center justify-between mb-3">
-						<div className="flex items-center space-x-3">
-							<div className="p-2 bg-blue-500/20 rounded-lg">
-								<PlayIcon className="w-4 h-4 text-blue-400" />
-							</div>
-							<span className="text-sm font-medium text-gray-300">Avg Speed</span>
-						</div>
-						<CheckCircleIcon className="w-4 h-4 text-blue-400" />
-					</div>
-					<div className="text-2xl font-bold text-blue-400">
-						{(metrics.avgSpeed || 0).toFixed ? (metrics.avgSpeed || 0).toFixed(1) : metrics.avgSpeed} m/s
-					</div>
-					<div className="text-xs text-gray-400 mt-1">Average train speed</div>
-				</div>
-			</div>
 
 			{/* Train Status Table */}
 			<div className="bg-slate-700/30 rounded-xl border border-white/10 overflow-hidden">

@@ -41,9 +41,6 @@ class RailwayCPOptimizer:
         # --- 1. Define Variables ---
         train_vars: Dict[str, Dict[str, Any]] = {}
 
-        # For each train and each node in its remaining route:
-        # Create an IntervalVar for when the train occupies the edge leaving that node
-        # Create IntVar for arrival time at node, departure time from node
         for train_id, train in trains.items():
             if not train.route or len(train.route) < 2:
                 continue # Skip trains without a valid route
@@ -70,16 +67,7 @@ class RailwayCPOptimizer:
             # If train is currently on an edge (u, v)
             if train.current_edge:
                 u, v = train.current_edge
-                # If the train is midway on an edge, we need to estimate remaining time.
-                # This makes the model more complex. For simplicity, we can assume
-                # a train starts fresh from its *current* or *next* major node.
-                # For a more robust model, you'd track exact position and time remaining on current edge.
-                # For this example, let's simplify: if on an edge, assume it departs `u` at `current_time_ms`
-                # or from the node it's *about to arrive at* if `position_on_edge` is very high.
-                # A better approach for online control is to only optimize for future segments.
-                pass # This is where "online" re-scheduling gets tricky.
-                # For now, let's treat `current_time_ms` as the effective departure from the *last completed* node.
-            
+                pass 
             # Simplified approach: If a train is past its initial node, its departure from that node
             # is fixed to its actual departure time.
             # Only optimize for future decisions.

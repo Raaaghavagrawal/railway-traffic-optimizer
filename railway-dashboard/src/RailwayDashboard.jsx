@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ControlPanel from './ControlPanel'
+import PerformanceMetrics from './components/PerformanceMetrics'
+import DelayPopup from './components/DelayPopup'
+import MLDelayPredictor from './services/MLDelayPredictor'
 import { MapContainer, TileLayer, Polyline, Rectangle, Marker, Tooltip, Pane, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -48,9 +51,250 @@ export default function RailwayDashboard() {
 	const [lastCritical, setLastCritical] = useState(null)
 	const [dismissedCritical, setDismissedCritical] = useState(false)
 	const [dismissedAlertKeys, setDismissedAlertKeys] = useState(new Set())
+	
+	// ML Delay Prediction
+	const [mlPredictor] = useState(() => new MLDelayPredictor())
+	const [delayPredictions, setDelayPredictions] = useState({})
+	const [activeDelayPopup, setActiveDelayPopup] = useState(null)
+	const [performanceMetrics, setPerformanceMetrics] = useState({
+		averageDelay: 120, // Start with 2 minutes delay
+		averageSpeed: 50, // Start with 50 km/h
+		throughput: 8, // Start with 8 trains/hour
+		onTimePerformance: 75, // Start with 75% on-time
+		criticalAlerts: 2, // Start with 2 critical alerts
+		lastUpdate: Date.now()
+	})
+	
+	// Track activeDelayPopup changes (no console output)
+	useEffect(() => {
+		// activeDelayPopup state changed
+	}, [activeDelayPopup])
+	const [showPerformanceMetrics, setShowPerformanceMetrics] = useState(false)
 	const [highlightPairs, setHighlightPairs] = useState(new Set())
 	const [isPlaying, setIsPlaying] = useState(true)
 	const [simTime, setSimTime] = useState(0)
+
+	// Initialize with TR1-TR10 train delay data for demonstration
+	useEffect(() => {
+		const sampleDelays = {
+			'TR1': { delay: 450, confidence: 85, isDelayed: true, severity: 'high' },
+			'TR2': { delay: 320, confidence: 78, isDelayed: true, severity: 'medium' },
+			'TR3': { delay: 180, confidence: 65, isDelayed: true, severity: 'low' },
+			'TR4': { delay: 600, confidence: 92, isDelayed: true, severity: 'critical' },
+			'TR5': { delay: 280, confidence: 70, isDelayed: true, severity: 'medium' },
+			'TR6': { delay: 380, confidence: 75, isDelayed: true, severity: 'high' },
+			'TR7': { delay: 220, confidence: 68, isDelayed: true, severity: 'medium' },
+			'TR8': { delay: 150, confidence: 60, isDelayed: true, severity: 'low' },
+			'TR9': { delay: 520, confidence: 88, isDelayed: true, severity: 'critical' },
+			'TR10': { delay: 340, confidence: 72, isDelayed: true, severity: 'high' }
+		}
+		setDelayPredictions(sampleDelays)
+		
+		// Set up cycling popups for TR1-TR5
+		let popupIndex = 0
+		const trainIds = ['TR1', 'TR5', 'TR3', 'TR8', 'TR10']
+		
+		const showNextPopup = () => {
+			const trainId = trainIds[popupIndex % trainIds.length]
+			const prediction = sampleDelays[trainId]
+			
+			if (prediction && prediction.isDelayed) {
+				const testTrain = { 
+					train_id: trainId, 
+					current_station: 'NDLS',
+					speed_mps: 5,
+					lastPopupTime: Date.now()
+				}
+				
+				const suggestions = mlPredictor.generateSuggestions(prediction, testTrain, stations)
+				
+				setActiveDelayPopup({
+					train: testTrain,
+					prediction,
+					suggestions
+				})
+			}
+			
+			popupIndex++
+		}
+		setTimeout(showNextPopup, 1000)
+		const popupInterval = setInterval(showNextPopup, 25000)
+		return () => clearInterval(popupInterval)
+	}, [])
+
+	// Delay popup based on actual train simulation data
+	useEffect(() => {
+		if (!isPlaying || telemetry.length === 0) return
+
+		// Check for trains that should show delay popups based on their current state
+		const checkForDelayPopups = () => {
+			telemetry.forEach(train => {
+				const trainId = train.id || train.train_id
+				if (!trainId) return
+
+				const prediction = delayPredictions[trainId]
+				const currentStation = train.current_station
+				const speed = train.speed_mps
+
+				// Show popup if train has delay prediction
+				if (prediction && prediction.isDelayed) {
+					// More lenient conditions - show if train is at any station or moving slowly
+					const isAtStation = speed < 10 // More lenient speed threshold
+					const isAtDelayStation = ['NDLS', 'ANVT', 'NZM', 'DLI', 'SDAH', 'NDLS', 'ANVT'].includes(currentStation)
+					
+					// Show popup if train is at a station or moving slowly
+					if (isAtStation || isAtDelayStation) {
+						// Check if we haven't shown a popup for this train recently
+						const lastPopupTime = train.lastPopupTime || 0
+						const now = Date.now()
+						
+						if (now - lastPopupTime > 60000) { // 1 minute between popups for same train
+							const suggestions = mlPredictor.generateSuggestions(prediction, train, stations)
+							setActiveDelayPopup({
+								train: { ...train, train_id: trainId, lastPopupTime: now },
+								prediction,
+								suggestions
+							})
+						}
+					}
+				}
+			})
+		}
+
+		// Check every 15 seconds for delay conditions (more frequent)
+		const delayCheckInterval = setInterval(checkForDelayPopups, 15000)
+		
+		// Also check immediately
+		checkForDelayPopups()
+
+		return () => clearInterval(delayCheckInterval)
+	}, [isPlaying, telemetry, delayPredictions, stations, mlPredictor])
+
+	// Fallback: Show popups every 2 minutes if no popups have been shown
+	useEffect(() => {
+		if (!isPlaying) return
+
+		let popupIndex = 0
+		const delayedTrainIds = ['TR1', 'TR2', 'TR3', 'TR4', 'TR5', 'TR6', 'TR7', 'TR8', 'TR9', 'TR10']
+		
+		const fallbackInterval = setInterval(() => {
+			// Only show fallback if no popup is currently active
+			if (!activeDelayPopup && Object.keys(delayPredictions).length > 0) {
+				const trainId = delayedTrainIds[popupIndex % delayedTrainIds.length]
+				const prediction = delayPredictions[trainId]
+				
+				if (prediction && prediction.isDelayed) {
+					setActiveDelayPopup({
+						train: { 
+							train_id: trainId, 
+							current_station: 'NDLS',
+							speed_mps: 5,
+							lastPopupTime: Date.now()
+						},
+						prediction,
+						suggestions: mlPredictor.generateSuggestions(prediction, { train_id: trainId }, stations)
+					})
+					console.log(`🔄 Fallback popup for ${trainId}`)
+				}
+				
+				popupIndex++
+			}
+		}, 120000) // Every 2 minutes
+
+		return () => clearInterval(fallbackInterval)
+	}, [isPlaying, delayPredictions, activeDelayPopup, stations, mlPredictor])
+
+
+	const handlePopupClose = () => {
+		setActiveDelayPopup(null)
+		// The interval will automatically show the next popup
+	}
+
+	// ML Delay Prediction Logic
+	const runMLDelayPrediction = (telemetryData) => {
+		const newPredictions = {}
+		
+		console.log('Running ML prediction for trains:', telemetryData.length, 'trains')
+		
+		telemetryData.forEach(train => {
+			// Use train.id or train.train_id as the key
+			const trainId = train.id || train.train_id
+			if (trainId) {
+				const prediction = mlPredictor.predictTrainDelay(train, stations, telemetryData)
+				newPredictions[trainId] = prediction
+				console.log(`Train ${trainId}:`, prediction)
+			}
+		})
+		
+		setDelayPredictions(prev => ({ ...prev, ...newPredictions }))
+	}
+
+	const handleApplySuggestion = (suggestion, train) => {
+		const trainId = train.train_id
+		let delayReduction = 0
+		let speedIncrease = 0
+		let throughputIncrease = 0
+		
+		switch (suggestion.type) {
+			case 'speed_optimization':
+				delayReduction = Math.round(delayPredictions[trainId]?.delay * 0.3) || 0
+				speedIncrease = 15
+				throughputIncrease = 12
+				break
+			case 'route_optimization':
+				delayReduction = Math.round(delayPredictions[trainId]?.delay * 0.4) || 0
+				speedIncrease = 10
+				throughputIncrease = 18
+				break
+			case 'schedule_adjustment':
+				delayReduction = Math.round(delayPredictions[trainId]?.delay * 0.2) || 0
+				speedIncrease = 5
+				throughputIncrease = 8
+				break
+			case 'signal_optimization':
+				delayReduction = Math.round(delayPredictions[trainId]?.delay * 0.25) || 0
+				speedIncrease = 8
+				throughputIncrease = 10
+				break
+			default:
+				delayReduction = Math.round(delayPredictions[trainId]?.delay * 0.15) || 0
+				speedIncrease = 5
+				throughputIncrease = 5
+		}
+		
+		// Update delay prediction for this train
+		if (delayPredictions[trainId]) {
+			const newDelay = Math.max(0, delayPredictions[trainId].delay - delayReduction)
+			const newPrediction = {
+				...delayPredictions[trainId],
+				delay: newDelay,
+				isDelayed: newDelay > 60, // Only consider delayed if more than 1 minute
+				severity: newDelay > 300 ? 'critical' : 
+						 newDelay > 180 ? 'high' : 
+						 newDelay > 60 ? 'medium' : 'low'
+			}
+			
+			setDelayPredictions(prev => ({
+				...prev,
+				[trainId]: newPrediction
+			}))
+		}
+		
+		// Update global performance metrics
+		setPerformanceMetrics(prev => ({
+			...prev,
+			averageDelay: Math.max(0, prev.averageDelay - (delayReduction / 60)), // Convert to minutes
+			averageSpeed: prev.averageSpeed + speedIncrease,
+			throughput: prev.throughput + throughputIncrease,
+			lastUpdate: Date.now()
+		}))
+		
+		// Show success notification
+		setLastCritical({
+			ts: Date.now(),
+			msg: `Applied ${suggestion.title} to ${trainId}. Delay reduced by ${delayReduction}s, throughput increased by ${throughputIncrease}%`
+		})
+	}
 
 	const [bbox, setBbox] = useState(null)
 	const [error, setError] = useState('')
@@ -128,6 +372,11 @@ export default function RailwayDashboard() {
 						setTelemetry(data)
 						setLastUpdateMs(ts)
 						setConnectionMode('http')
+						
+						// Run ML delay prediction on new telemetry data
+						if (data && data.length > 0) {
+							runMLDelayPrediction(data)
+						}
 					}
 				} catch (e) { if (!cancelled) setError(String(e)) }
 				finally { if (!cancelled) httpTimer = setTimeout(poll, 1000) }
@@ -148,6 +397,11 @@ export default function RailwayDashboard() {
 							lastTelemetryRef.current = { data, ts }
 							setTelemetry(data)
 							setLastUpdateMs(ts)
+							
+							// Run ML delay prediction on new telemetry data
+							if (data && data.length > 0) {
+								runMLDelayPrediction(data)
+							}
 						}
 						if (msg.type === 'alerts' && Array.isArray(msg.data)) {
 							// Merge new alerts into existing list; keep old ones until user dismisses
@@ -338,9 +592,20 @@ export default function RailwayDashboard() {
 	return (
 		<div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 font-primary">
 			<div className="h-screen w-full flex flex-col overflow-hidden animate-fade-in">
+				{/* Delay Popup */}
+				{activeDelayPopup && (
+					<DelayPopup
+						delayPrediction={activeDelayPopup.prediction}
+						train={activeDelayPopup.train}
+						suggestions={activeDelayPopup.suggestions}
+						onClose={handlePopupClose}
+						onApplySuggestion={handleApplySuggestion}
+					/>
+				)}
+
 				{/* Floating critical alert toast */}
-				{lastCritical && (Date.now() - (lastCritical.ts || 0) < 5000) && !dismissedCritical && (
-					<div className="fixed top-4 right-4 z-[9999] animate-popup-enter">
+				{lastCritical && lastCritical.ts && (Date.now() - lastCritical.ts < 5000) && !dismissedCritical && (
+					<div className="fixed top-4 right-4 z-[9996] animate-popup-enter">
 						<div className="bg-gradient-to-r from-slate-800 to-slate-900 border-2 border-red-400 rounded-xl p-4 min-w-80 max-w-sm shadow-2xl shadow-red-500/50 ring-1 ring-red-400 relative">
 							{/* Close button */}
 							<button
@@ -364,16 +629,21 @@ export default function RailwayDashboard() {
 										<span className="text-xs font-bold text-red-200 uppercase tracking-wide">CRITICAL ALERT</span>
 									</div>
 									<div className="text-base font-bold text-white">
-										Collision Risk: {lastCritical.alert.pair.a} ↔ {lastCritical.alert.pair.b}
+										{lastCritical.alert?.pair ? 
+											`Collision Risk: ${lastCritical.alert.pair.a} ↔ ${lastCritical.alert.pair.b}` :
+											lastCritical.msg || 'Critical Alert'
+										}
 									</div>
-									<div className="text-xs text-gray-200 bg-slate-700 rounded-lg px-2 py-1">
-										Distance: {lastCritical.alert.distance_m}m · Speed: {lastCritical.alert.relative_speed_mps}m/s
-									</div>
-									{(lastCritical.alert.suggestions || []).length > 0 && (
+									{lastCritical.alert?.pair && (
+										<div className="text-xs text-gray-200 bg-slate-700 rounded-lg px-2 py-1">
+											Distance: {lastCritical.alert.distance_m}m · Speed: {lastCritical.alert.relative_speed_mps}m/s
+										</div>
+									)}
+									{lastCritical.alert?.suggestions && lastCritical.alert.suggestions.length > 0 && (
 										<div className="bg-slate-700 border border-red-400 rounded-lg p-2">
 											<p className="text-xs font-semibold text-red-200 mb-1">Actions:</p>
 											<ul className="text-xs text-red-100 space-y-0.5">
-												{(lastCritical.alert.suggestions || []).slice(0, 2).map((s, i) => (
+												{(lastCritical.alert?.suggestions || []).slice(0, 2).map((s, i) => (
 													<li key={i} className="flex items-start space-x-1">
 														<span className="text-red-400 mt-0.5">•</span>
 														<span>{s}</span>
@@ -449,10 +719,24 @@ export default function RailwayDashboard() {
 
 				{/* Main Content */}
 				<div className="flex-1 flex min-h-0 overflow-hidden">
-					{/* Map Section */}
-					<div className="flex-1 relative min-w-0">
-						<div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 to-purple-900/20 z-10 pointer-events-none" />
-					<MapContainer center={center} zoom={14} className="w-full h-full" preferCanvas>
+				{/* Map Section */}
+				<div className="relative min-w-0 flex-1">
+					<div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 to-purple-900/20 z-10 pointer-events-none" />
+					
+					{/* Performance Metrics Toggle Button - Near Map */}
+					<div className="absolute top-4 left-4 z-[1000]">
+						<button
+							onClick={() => setShowPerformanceMetrics(!showPerformanceMetrics)}
+							className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl transition-all duration-200 shadow-lg hover:shadow-blue-500/25 border border-blue-500/30 backdrop-blur-sm"
+						>
+							<ChartBarIcon className="w-4 h-4" />
+							<span className="text-sm font-medium">
+								{showPerformanceMetrics ? 'Hide Metrics' : 'Show Metrics'}
+							</span>
+						</button>
+					</div>
+					
+				<MapContainer center={center} zoom={14} className="w-full h-[92vh] mb-6" preferCanvas>
 						{/* Base OSM */}
 						<TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
 						{/* Railway overlay */}
@@ -551,44 +835,79 @@ export default function RailwayDashboard() {
 
 					{/* Trains */}
 					<Pane name="trains" style={{ zIndex: 440 }}>
-						{trainLatLngs.map((t, index) => (
-							<Marker 
-								key={`train-${t.id}-${index}`} 
-								position={[t.lat, t.lon]} 
-								icon={L.divIcon({ 
-									className: 'train-icon', 
-									html: `
-										<div class="train-marker-container" style="
-											display: flex;
-											align-items: center;
-											gap: 6px;
-											background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
-											padding: 6px 12px;
-											border-radius: 20px;
-											border: 2px solid #ffffff;
-											box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-											transition: all 0.3s ease;
-											cursor: pointer;
-										">
-											<div style="font-size: 16px; line-height: 1;">🚆</div>
-											<div style="
-												color: white;
-												font-weight: 600;
-												font-size: 12px;
-												text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-											">${t.id}</div>
+						{trainLatLngs.map((t, index) => {
+							const trainId = t.id
+							const isDelayed = delayPredictions[trainId]?.isDelayed || false
+							const delaySeverity = delayPredictions[trainId]?.severity || 'low'
+							const delayMinutes = Math.round((delayPredictions[trainId]?.delay || 0) / 60)
+							
+							const getTrainColor = () => {
+								if (isDelayed) {
+									switch (delaySeverity) {
+										case 'critical': return '#ef4444'
+										case 'high': return '#f97316'
+										case 'medium': return '#eab308'
+										default: return '#3b82f6'
+									}
+								}
+								return '#3b82f6'
+							}
+							
+							const trainColor = getTrainColor()
+							
+							return (
+								<Marker 
+									key={`train-${t.id}-${index}`} 
+									position={[t.lat, t.lon]} 
+									icon={L.divIcon({ 
+										className: 'train-icon', 
+										html: `
+											<div class="train-marker-container" style="
+												display: flex;
+												align-items: center;
+												gap: 6px;
+												background: linear-gradient(135deg, ${trainColor} 0%, ${trainColor}dd 100%);
+												padding: 6px 12px;
+												border-radius: 20px;
+												border: 2px solid #ffffff;
+												box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+												transition: all 0.3s ease;
+												cursor: pointer;
+												${isDelayed ? 'animation: pulse 2s infinite;' : ''}
+											">
+												<div style="font-size: 16px; line-height: 1;">🚆</div>
+												<div style="
+													color: white;
+													font-weight: 600;
+													font-size: 12px;
+													text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+												">${t.id}</div>
+												${isDelayed ? `<div style="
+													background: rgba(255, 255, 255, 0.2);
+													border-radius: 10px;
+													padding: 2px 6px;
+													font-size: 10px;
+													font-weight: bold;
+													color: white;
+												">${delayMinutes}m</div>` : ''}
+											</div>
+										` 
+									})}
+								>
+									<Tooltip direction="right" offset={[8,0]} opacity={1} className="custom-tooltip">
+										<div className="bg-slate-800/95 backdrop-blur-md border border-white/20 rounded-lg p-3 shadow-xl">
+											<div className="font-semibold text-white text-sm">{t.id}</div>
+											<div className="text-xs text-gray-300 capitalize mt-1">{t.status}</div>
+											{isDelayed && (
+												<div className="text-xs text-red-400 font-semibold mt-1">
+													Delayed: {delayMinutes}m ({delaySeverity})
+												</div>
+											)}
 										</div>
-									` 
-								})}
-							>
-								<Tooltip direction="right" offset={[8,0]} opacity={1} className="custom-tooltip">
-									<div className="bg-slate-800/95 backdrop-blur-md border border-white/20 rounded-lg p-3 shadow-xl">
-										<div className="font-semibold text-white text-sm">{t.id}</div>
-										<div className="text-xs text-gray-300 capitalize mt-1">{t.status}</div>
-									</div>
-								</Tooltip>
-							</Marker>
-						))}
+									</Tooltip>
+								</Marker>
+							)
+						})}
 					</Pane>
 
 					{/* Live Train Positions Overlay */}
@@ -786,6 +1105,56 @@ export default function RailwayDashboard() {
 							</div>
 						</div>
 					</div>
+
+					{/* Performance Metrics Panel */}
+					{showPerformanceMetrics && (
+						<div 
+							className="fixed inset-0 z-[9998] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+							onClick={(e) => {
+								if (e.target === e.currentTarget) {
+									setShowPerformanceMetrics(false)
+								}
+							}}
+						>
+							<div className="bg-gradient-to-br from-slate-800/95 to-slate-900/95 backdrop-blur-md border border-blue-500/30 rounded-2xl shadow-2xl max-w-5xl w-full h-[95vh] overflow-hidden animate-popup-enter">
+								<div className="h-full flex flex-col">
+									{/* Panel Header */}
+									<div className="bg-gradient-to-r from-slate-700/80 to-slate-800/80 border-b border-blue-500/20 px-6 py-4 flex-shrink-0">
+										<div className="flex items-center justify-between">
+											<div className="flex items-center space-x-4">
+												<div className="p-3 bg-gradient-to-br from-blue-500/30 to-blue-600/30 rounded-xl border border-blue-400/30">
+													<ChartBarIcon className="w-6 h-6 text-blue-300" />
+												</div>
+												<div>
+													<h3 className="text-xl font-bold text-white font-display">Performance Metrics</h3>
+													<p className="text-sm text-blue-200">Real-time analytics & insights</p>
+												</div>
+											</div>
+											<button
+												onClick={() => setShowPerformanceMetrics(false)}
+												className="text-white/70 hover:text-white hover:bg-white/20 rounded-full p-2 transition-all duration-200"
+											>
+												<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+												</svg>
+											</button>
+										</div>
+									</div>
+									
+									{/* Content */}
+									<div className="flex-1 overflow-y-auto p-4 scrollbar-thin scrollbar-thumb-blue-500 scrollbar-track-slate-700 hover:scrollbar-thumb-blue-400" style={{ maxHeight: 'calc(95vh - 80px)' }}>
+										<PerformanceMetrics 
+											telemetry={telemetry}
+											alerts={alerts}
+											stations={stations}
+											performanceMetrics={performanceMetrics}
+											delayPredictions={delayPredictions}
+										/>
+									</div>
+								</div>
+							</div>
+						</div>
+					)}
 				</div>
 			</div>
 		</div>

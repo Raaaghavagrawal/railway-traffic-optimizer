@@ -977,8 +977,7 @@ async def _advance_sequence(app: FastAPI) -> None:
     
     while True:
         try:
-            await asyncio.sleep(0.05)  # Update 20 times per second for very smooth movement
-            
+            await asyncio.sleep(0.05)  # 20 updates per second
             for train_id, state in _train_states.items():
                 # Update progress based on direction
                 if state["direction"] == 1:
